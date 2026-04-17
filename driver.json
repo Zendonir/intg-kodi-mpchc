@@ -9,11 +9,30 @@
   "description": {
     "en": "UC Remote integration bridge for Kodi and MPC-HC. Connects to a lightweight hub running on the same PC as Kodi/MPC-HC and exposes a full media-player entity."
   },
-  "port": 9090,
   "developer": {
     "name": "Zendonir",
     "url": "https://github.com/Zendonir"
   },
   "home_page": "https://github.com/Zendonir/intg-kodi-mpchc",
+  "setup_data_schema": {
+    "title": {
+      "en": "Integration setup"
+    },
+    "settings": [
+      {
+        "id": "info",
+        "label": {
+          "en": "Setup"
+        },
+        "field": {
+          "label": {
+            "value": {
+              "en": "Enter the host and port of the kodi-mpchc-bridge hub running on your PC."
+            }
+          }
+        }
+      }
+    ]
+  },
   "release_date": "2026-04-17"
 }

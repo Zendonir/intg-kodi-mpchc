@@ -1,4 +1,7 @@
 # Build a self-contained aarch64 binary and publish as GitHub Release
+# Modelled after https://github.com/albaintor/integration-kodi and the
+# official UC AndroidTV integration.
+---
 name: "Build & Release"
 
 on:
@@ -6,13 +9,16 @@ on:
     branches: [main]
     tags:
       - v[0-9]+.[0-9]+.[0-9]+*
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 env:
   INTG_NAME: kodi-mpchc
-  HASH_FILENAME: uc-src.hash
+  HASH_FILENAME: uc-intg-kodi-mpchc.hash
   PYTHON_VER: 3.11.13-0.4.0
 
 jobs:
@@ -27,10 +33,16 @@ jobs:
       - name: Fetch all tags to determine version
         run: |
           git fetch origin +refs/tags/*:refs/tags/*
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
-          else
-            echo "VERSION=v$(jq .version -r driver.json)" >> $GITHUB_ENV
+          echo "VERSION=v$(jq .version -r driver.json)" >> $GITHUB_ENV
+
+      - name: Verify driver.json version for release build
+        if: contains(github.ref, 'tags/v')
+        run: |
+          DRIVER_VERSION="v$(jq .version -r driver.json)"
+          TAG_VERSION="${{ github.ref_name }}"
+          if [ "$TAG_VERSION" != "$DRIVER_VERSION" ]; then
+            echo "Version in driver.json ($DRIVER_VERSION) doesn't match git tag ($TAG_VERSION)!"
+            exit 1
           fi
 
       - name: Install QEMU for aarch64
@@ -42,7 +54,7 @@ jobs:
         run: |
           echo "Starting PyInstaller build for aarch64"
           docker run --rm --name builder \
-            --platform=linux/arm64 \
+            --platform=linux/arm64/v8 \
             --user=$(id -u):$(id -g) \
             -v ${GITHUB_WORKSPACE}:/workspace \
             docker.io/unfoldedcircle/r2-pyinstaller:${PYTHON_VER} \
@@ -51,14 +63,22 @@ jobs:
               python -m pip install -r requirements.txt && \
               pyinstaller --clean --onedir --name driver src/driver.py"
 
-      - name: Prepare artifacts
+      - name: Add version
         run: |
-          mkdir -p artifacts/bin
-          cp -r dist/driver/* artifacts/bin/
+          mkdir -p artifacts
+          cd artifacts
+          echo ${{ env.VERSION }} > version.txt
+
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          cp -r dist/driver artifacts/
+          mv artifacts/driver artifacts/bin
           cp driver.json artifacts/
           echo "ARTIFACT_NAME=uc-intg-${{ env.INTG_NAME }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
 
       - name: Create archive
+        shell: bash
         run: |
           tar czvf ${{ env.ARTIFACT_NAME }}.tar.gz -C ${GITHUB_WORKSPACE}/artifacts .
           ls -lah ${{ env.ARTIFACT_NAME }}.tar.gz
@@ -83,7 +103,7 @@ jobs:
       - name: Extract archives from downloaded artifact directories
         run: |
           for D in */; do
-            if [ -d "$D" ]; then
+            if [ -d "${D}" ]; then
               mv "$D"* ./
             fi
           done
