@@ -91,22 +91,31 @@ class BridgeSelect(Select):
         if self._select_type == "subtitle" and option in (_SUBTITLE_OFF, "", "off"):
             return await self._client.send_command(bridge_cmd, -1)
 
-        for track in self._tracks:
-            if track.get("label") == option:
-                return await self._client.send_command(bridge_cmd, track.get("pos", 0))
+        for i, track in enumerate(self._tracks):
+            # Use the same fallback label as apply_state so label-less tracks (e.g. chapters) match.
+            label = track.get("label", f"Track {i}")
+            if label == option:
+                return await self._client.send_command(bridge_cmd, track.get("pos", i))
         return False
+
+    def _label_at(self, idx: int) -> str:
+        """Return the display label for track at *idx*, using the same fallback as apply_state."""
+        if 0 <= idx < len(self._tracks):
+            return self._tracks[idx].get("label", f"Track {idx}")
+        return ""
 
     async def _step(self, direction: int) -> bool:
         if not self._tracks:
             return False
         base = max(self._current_idx, 0)
         new_idx = (base + direction) % len(self._tracks)
-        return await self._select_option(self._tracks[new_idx].get("label", ""))
+        return await self._select_option(self._label_at(new_idx))
 
     async def _jump(self, idx: int) -> bool:
         if not self._tracks:
             return False
-        return await self._select_option(self._tracks[idx].get("label", ""))
+        target = idx if idx >= 0 else len(self._tracks) + idx
+        return await self._select_option(self._label_at(target))
 
     # ------------------------------------------------------------------
     # State updates from bridge
@@ -133,10 +142,11 @@ class BridgeSelect(Select):
             if self._current_idx < 0 or self._current_idx >= len(self._tracks):
                 current_label = _SUBTITLE_OFF
             else:
-                current_label = self._tracks[self._current_idx].get("label", _SUBTITLE_OFF)
+                # labels already includes the f"Track {i}" fallback for label-less tracks
+                current_label = labels[self._current_idx]
         else:
             if 0 <= self._current_idx < len(self._tracks):
-                current_label = self._tracks[self._current_idx].get("label", "")
+                current_label = labels[self._current_idx]
             else:
                 current_label = labels[0] if labels else ""
 
