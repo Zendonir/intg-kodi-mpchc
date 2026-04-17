@@ -92,6 +92,8 @@ class BridgeMediaPlayer(MediaPlayer):
                 Attributes.MUTED: False,
                 Attributes.SHUFFLE: False,
                 Attributes.REPEAT: "off",
+                Attributes.SOURCE: "",
+                Attributes.SOURCE_LIST: [],
             },
             device_class=DeviceClasses.TV,
         )
@@ -137,6 +139,14 @@ class BridgeMediaPlayer(MediaPlayer):
         if "repeat" in patch:
             attrs[Attributes.REPEAT] = patch["repeat"]
 
+        if "audio_tracks" in patch:
+            tracks = self._state.get("audio_tracks", [])
+            source_list = [t.get("label", f"Track {i}") for i, t in enumerate(tracks)]
+            attrs[Attributes.SOURCE_LIST] = source_list
+            active = next((t.get("label") for t in tracks if t.get("active")), None)
+            if active is not None:
+                attrs[Attributes.SOURCE] = active
+
         return attrs
 
     # ------------------------------------------------------------------
@@ -152,6 +162,9 @@ class BridgeMediaPlayer(MediaPlayer):
         p = params or {}
 
         cmd_map: dict[str, tuple[str, Any]] = {
+            Commands.ON: ("launch", None),
+            Commands.OFF: ("quit", None),
+            Commands.TOGGLE: ("toggle", None),
             Commands.PLAY_PAUSE: ("play_pause", None),
             Commands.STOP: ("stop", None),
             Commands.NEXT: ("next_chapter", None),

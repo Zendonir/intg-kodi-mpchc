@@ -10,7 +10,8 @@ import uuid
 import ucapi
 from ucapi import IntegrationAPI
 
-from config import DeviceConfig, devices
+import config
+from config import DeviceConfig
 from const import DEFAULT_BRIDGE_HOST, DEFAULT_BRIDGE_PORT
 
 _LOG = logging.getLogger(__name__)
@@ -67,8 +68,8 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
     device_id = str(uuid.uuid4())
     cfg = DeviceConfig(id=device_id, name=name, bridge_host=host, bridge_port=port)
 
-    if devices:
-        devices.add_or_update(cfg)
+    if config.devices:
+        config.devices.add_or_update(cfg)
 
     _LOG.info("Device configured: %s @ %s:%d", name, host, port)
     return ucapi.SetupComplete()
@@ -76,7 +77,7 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
 
 async def reconfigure_handler(msg: ucapi.SetupDriver, _api: IntegrationAPI, device_id: str) -> ucapi.SetupAction:
     """Handle device reconfiguration."""
-    cfg = devices.get(device_id) if devices else None
+    cfg = config.devices.get(device_id) if config.devices else None
 
     if isinstance(msg, ucapi.DriverSetupRequest):
         current_host = cfg.bridge_host if cfg else DEFAULT_BRIDGE_HOST
@@ -114,8 +115,8 @@ async def reconfigure_handler(msg: ucapi.SetupDriver, _api: IntegrationAPI, devi
             port = DEFAULT_BRIDGE_PORT
 
         updated = DeviceConfig(id=device_id, name=name, bridge_host=host, bridge_port=port)
-        if devices:
-            devices.add_or_update(updated)
+        if config.devices:
+            config.devices.add_or_update(updated)
         return ucapi.SetupComplete()
 
     if isinstance(msg, ucapi.AbortDriverSetup):
