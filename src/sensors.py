@@ -17,8 +17,6 @@ SENSOR_DEFS: list[tuple[str, str, DeviceClasses, str | None, int | None]] = [
     ("active_player", "Active Player", DeviceClasses.CUSTOM, None, None),
     ("state", "Playback State", DeviceClasses.CUSTOM, None, None),
     ("title", "Title", DeviceClasses.CUSTOM, None, None),
-    ("artist", "Artist", DeviceClasses.CUSTOM, None, None),
-    ("album", "Album", DeviceClasses.CUSTOM, None, None),
     ("media_type", "Media Type", DeviceClasses.CUSTOM, None, None),
     ("position", "Position", DeviceClasses.CUSTOM, "s", 0),
     ("duration", "Duration", DeviceClasses.CUSTOM, "s", 0),
@@ -26,6 +24,18 @@ SENSOR_DEFS: list[tuple[str, str, DeviceClasses, str | None, int | None]] = [
     ("muted", "Muted", DeviceClasses.BINARY, None, None),
     ("shuffle", "Shuffle", DeviceClasses.BINARY, None, None),
     ("repeat", "Repeat", DeviceClasses.CUSTOM, None, None),
+    # Music metadata
+    ("artist", "Artist", DeviceClasses.CUSTOM, None, None),
+    ("album", "Album", DeviceClasses.CUSTOM, None, None),
+    # Movie / general metadata
+    ("year", "Year", DeviceClasses.CUSTOM, None, None),
+    ("rating", "Rating", DeviceClasses.CUSTOM, None, 1),
+    # TV show / episode metadata
+    ("tv_show", "TV Show", DeviceClasses.CUSTOM, None, None),
+    ("season", "Season", DeviceClasses.CUSTOM, None, None),
+    ("episode", "Episode", DeviceClasses.CUSTOM, None, None),
+    ("season_count", "Season Count", DeviceClasses.CUSTOM, None, None),
+    ("episode_count", "Episode Count", DeviceClasses.CUSTOM, None, None),
     # Video / stream info
     ("video_width", "Width", DeviceClasses.CUSTOM, "px", 0),
     ("video_height", "Height", DeviceClasses.CUSTOM, "px", 0),
@@ -36,6 +46,7 @@ SENSOR_DEFS: list[tuple[str, str, DeviceClasses, str | None, int | None]] = [
 ]
 
 
+# Fields where a value of 0 / 0.0 means "nothing playing" and should display as empty.
 _ZERO_IS_EMPTY = frozenset(
     {
         "video_width",
@@ -44,6 +55,12 @@ _ZERO_IS_EMPTY = frozenset(
         "video_bitrate_kbps",
         "position",
         "duration",
+        "year",
+        "season",
+        "episode",
+        "season_count",
+        "episode_count",
+        "rating",
     }
 )
 

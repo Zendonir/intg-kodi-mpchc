@@ -4,6 +4,9 @@ Select entities for audio track, subtitle track and chapter selection.
 Each BridgeSelect exposes the list of available options that arrive in
 bridge state pushes and dispatches SELECT_OPTION commands back as bridge
 control commands.
+
+Chapter note: the bridge exposes no direct "jump to chapter N" command.
+Selecting a chapter is implemented by seeking to its timestamp (time_ms).
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from ucapi.select import Attributes, Commands, States
 from bridge_client import BridgeClient
 
 # Mapping: select_type → (bridge tracks key, bridge command name, bridge current-index key)
+# The chapter "command" column is unused — chapter selection uses seek instead.
 _TYPE_MAP: dict[str, tuple[str, str, str]] = {
     "audio": ("audio_tracks", "audio_track", "current_audio"),
     "subtitle": ("subtitle_tracks", "subtitle_track", "current_subtitle"),
@@ -23,6 +27,16 @@ _TYPE_MAP: dict[str, tuple[str, str, str]] = {
 }
 
 _SUBTITLE_OFF = "Off"
+
+
+def _track_label(track: dict[str, Any], idx: int) -> str:
+    """Return a display label for a track.
+
+    Audio/subtitle tracks carry a pre-formatted ``label`` key.
+    Chapter objects use ``name`` instead.  Fall back to ``"Track N"`` when
+    neither is present (should not happen in practice).
+    """
+    return track.get("label") or track.get("name") or f"Track {idx}"
 
 
 class BridgeSelect(Select):
@@ -92,16 +106,19 @@ class BridgeSelect(Select):
             return await self._client.send_command(bridge_cmd, -1)
 
         for i, track in enumerate(self._tracks):
-            # Use the same fallback label as apply_state so label-less tracks (e.g. chapters) match.
-            label = track.get("label", f"Track {i}")
-            if label == option:
+            if _track_label(track, i) == option:
+                if self._select_type == "chapter":
+                    # The bridge has no direct "jump to chapter N" command.
+                    # Seek to the chapter's start timestamp instead.
+                    time_s = track.get("time_ms", 0) / 1000.0
+                    return await self._client.send_command("seek", time_s)
                 return await self._client.send_command(bridge_cmd, track.get("pos", i))
         return False
 
     def _label_at(self, idx: int) -> str:
-        """Return the display label for track at *idx*, using the same fallback as apply_state."""
+        """Return the display label for track at *idx*."""
         if 0 <= idx < len(self._tracks):
-            return self._tracks[idx].get("label", f"Track {idx}")
+            return _track_label(self._tracks[idx], idx)
         return ""
 
     async def _step(self, direction: int) -> bool:
@@ -132,7 +149,7 @@ class BridgeSelect(Select):
         if current_key in patch:
             self._current_idx = patch[current_key]
 
-        labels = [t.get("label", f"Track {i}") for i, t in enumerate(self._tracks)]
+        labels = [_track_label(t, i) for i, t in enumerate(self._tracks)]
         if self._select_type == "subtitle":
             options = [_SUBTITLE_OFF] + labels
         else:
