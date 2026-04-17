@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
+from functools import partial
 from typing import Any
 
 import ucapi
@@ -20,11 +22,17 @@ from bridge_client import BridgeClient
 from config import DeviceConfig, Devices
 from const import DRIVER_ID, DRIVER_NAME, INTEGRATION_VERSION
 from media_player import BridgeMediaPlayer
-from setup_flow import driver_setup_handler, reconfigure_handler
+from setup_flow import driver_setup_handler
 
 _LOG = logging.getLogger(__name__)
 
-api = IntegrationAPI(os.environ.get("UC_CONFIG_HOME", "."))
+if sys.platform == "win32":
+    _LOOP = asyncio.SelectorEventLoop()
+else:
+    _LOOP = asyncio.new_event_loop()
+asyncio.set_event_loop(_LOOP)
+
+api = IntegrationAPI(_LOOP)
 
 # device_id → BridgeClient
 _clients: dict[str, BridgeClient] = {}
@@ -147,25 +155,16 @@ async def _on_entity_command(
 ) -> None:
     player = _players.get(entity_id.replace("media_player.", ""))
     if player is None:
-        await api.acknowledge(websocket, req_id, ucapi.StatusCodes.NOT_FOUND)
+        await api.acknowledge_command(websocket, req_id, ucapi.StatusCodes.NOT_FOUND)
         return
     result = await player.command(cmd_id, params)
-    await api.acknowledge(websocket, req_id, result)
-
-
-# ---------------------------------------------------------------------------
-# Driver setup
-# ---------------------------------------------------------------------------
-@api.listens_to(ucapi.Events.SETUP_DRIVER)
-async def _on_setup(websocket, req_id: str, msg: ucapi.SetupDriver) -> None:
-    action = await driver_setup_handler(msg, api)
-    await api.driver_setup_response(websocket, req_id, action)
+    await api.acknowledge_command(websocket, req_id, result)
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
-def main() -> None:
+async def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
@@ -183,8 +182,10 @@ def main() -> None:
     for cfg in config.devices.all():
         _add_device(cfg)
 
-    api.run()
+    # Wire the setup handler: driver_setup_handler(msg, api) — bind api via partial
+    await api.init("driver.json", partial(driver_setup_handler, api=api))
 
 
 if __name__ == "__main__":
-    main()
+    _LOOP.run_until_complete(main())
+    _LOOP.run_forever()
