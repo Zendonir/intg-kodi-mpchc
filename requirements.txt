@@ -1,2 +1,3 @@
-ucapi>=0.12.0
+ucapi
+ file:./src/ucapi-0.5.3.dev4+gd4b2dacd9.d20260401-py3-none-any.whl
 aiohttp>=3.9.0
