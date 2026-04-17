@@ -127,9 +127,7 @@ class BridgeMediaPlayer(MediaPlayer):
         if "artwork_url" in patch:
             attrs[Attributes.MEDIA_IMAGE_URL] = patch["artwork_url"]
         if "media_type" in patch:
-            attrs[Attributes.MEDIA_TYPE] = _MEDIA_TYPE_MAP.get(
-                patch["media_type"], MediaContentType.VIDEO
-            )
+            attrs[Attributes.MEDIA_TYPE] = _MEDIA_TYPE_MAP.get(patch["media_type"], MediaContentType.VIDEO)
         if "volume" in patch:
             attrs[Attributes.VOLUME] = patch["volume"]
         if "muted" in patch:
@@ -154,26 +152,26 @@ class BridgeMediaPlayer(MediaPlayer):
         p = params or {}
 
         cmd_map: dict[str, tuple[str, Any]] = {
-            Commands.PLAY_PAUSE:    ("play_pause", None),
-            Commands.STOP:          ("stop", None),
-            Commands.NEXT:          ("next_chapter", None),
-            Commands.PREVIOUS:      ("prev_chapter", None),
-            Commands.FAST_FORWARD:  ("skip_forward", None),
-            Commands.REWIND:        ("skip_backward", None),
-            Commands.VOLUME_UP:     ("volume_up", None),
-            Commands.VOLUME_DOWN:   ("volume_down", None),
-            Commands.MUTE_TOGGLE:   ("mute", None),
+            Commands.PLAY_PAUSE: ("play_pause", None),
+            Commands.STOP: ("stop", None),
+            Commands.NEXT: ("next_chapter", None),
+            Commands.PREVIOUS: ("prev_chapter", None),
+            Commands.FAST_FORWARD: ("skip_forward", None),
+            Commands.REWIND: ("skip_backward", None),
+            Commands.VOLUME_UP: ("volume_up", None),
+            Commands.VOLUME_DOWN: ("volume_down", None),
+            Commands.MUTE_TOGGLE: ("mute", None),
             Commands.SHUFFLE: ("shuffle", None),
-            Commands.CURSOR_UP:     ("navigate_up", None),
-            Commands.CURSOR_DOWN:   ("navigate_down", None),
-            Commands.CURSOR_LEFT:   ("navigate_left", None),
-            Commands.CURSOR_RIGHT:  ("navigate_right", None),
-            Commands.CURSOR_ENTER:  ("navigate_select", None),
-            Commands.BACK:          ("navigate_back", None),
-            Commands.HOME:          ("navigate_home", None),
-            Commands.CONTEXT_MENU:  ("context_menu", None),
-            Commands.INFO:          ("show_info", None),
-            Commands.SETTINGS:      ("navigate_home", None),
+            Commands.CURSOR_UP: ("navigate_up", None),
+            Commands.CURSOR_DOWN: ("navigate_down", None),
+            Commands.CURSOR_LEFT: ("navigate_left", None),
+            Commands.CURSOR_RIGHT: ("navigate_right", None),
+            Commands.CURSOR_ENTER: ("navigate_select", None),
+            Commands.BACK: ("navigate_back", None),
+            Commands.HOME: ("navigate_home", None),
+            Commands.CONTEXT_MENU: ("context_menu", None),
+            Commands.INFO: ("show_info", None),
+            Commands.SETTINGS: ("navigate_home", None),
         }
 
         if cmd_id in cmd_map:

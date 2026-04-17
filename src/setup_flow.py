@@ -55,9 +55,7 @@ async def driver_setup_handler(msg: ucapi.SetupDriver, api: IntegrationAPI) -> u
     return ucapi.SetupError()
 
 
-async def _handle_user_data(
-    msg: ucapi.UserDataResponse, _api: IntegrationAPI
-) -> ucapi.SetupAction:
+async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -> ucapi.SetupAction:
     inp = msg.input_values or {}
     name = inp.get("name", "Kodi / MPC-HC").strip() or "Kodi / MPC-HC"
     host = inp.get("bridge_host", DEFAULT_BRIDGE_HOST).strip() or DEFAULT_BRIDGE_HOST
@@ -76,9 +74,7 @@ async def _handle_user_data(
     return ucapi.SetupComplete()
 
 
-async def reconfigure_handler(
-    msg: ucapi.SetupDriver, _api: IntegrationAPI, device_id: str
-) -> ucapi.SetupAction:
+async def reconfigure_handler(msg: ucapi.SetupDriver, _api: IntegrationAPI, device_id: str) -> ucapi.SetupAction:
     """Handle device reconfiguration."""
     cfg = devices.get(device_id) if devices else None
 

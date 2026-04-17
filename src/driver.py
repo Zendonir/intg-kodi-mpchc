@@ -91,6 +91,7 @@ def _make_state_handler(device_id: str):
         attrs = player.apply_state(state)
         if attrs:
             api.configured_entities.update_attributes(player.id, attrs)
+
     return _on_state
 
 

@@ -22,10 +22,7 @@ class DeviceConfig:
 
     def __post_init__(self) -> None:
         for f in fields(self):
-            if (
-                not isinstance(f.default, dataclasses.MISSING.__class__)
-                and getattr(self, f.name) is None
-            ):
+            if not isinstance(f.default, dataclasses.MISSING.__class__) and getattr(self, f.name) is None:
                 setattr(self, f.name, f.default)
 
 
