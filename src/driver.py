@@ -70,6 +70,7 @@ def _add_device(cfg: DeviceConfig) -> None:
 
     # Media player
     player = BridgeMediaPlayer(cfg, client)
+    player.device_id = cfg.id
     _players[cfg.id] = player
     api.available_entities.add(player)
 
@@ -77,6 +78,7 @@ def _add_device(cfg: DeviceConfig) -> None:
     sensors: list[BridgeSensor] = []
     for state_key, name, device_class, unit, decimals in SENSOR_DEFS:
         sensor = BridgeSensor(cfg.id, state_key, name, device_class, unit, decimals)
+        sensor.device_id = cfg.id
         api.available_entities.add(sensor)
         sensors.append(sensor)
     _sensors[cfg.id] = sensors
@@ -85,11 +87,18 @@ def _add_device(cfg: DeviceConfig) -> None:
     selects: list[BridgeSelect] = []
     for sel_type, sel_name in _SELECT_DEFS:
         sel = BridgeSelect(cfg.id, sel_type, sel_name, client)
+        sel.device_id = cfg.id
         api.available_entities.add(sel)
         selects.append(sel)
     _selects[cfg.id] = selects
 
-    _LOG.info("Device added: %s (%s:%d)", cfg.name, cfg.bridge_host, cfg.bridge_port)
+    _LOG.info(
+        "Device added: %s (%s:%d) — %d entities registered",
+        cfg.name,
+        cfg.bridge_host,
+        cfg.bridge_port,
+        1 + len(sensors) + len(selects),
+    )
 
 
 def _remove_device(cfg: DeviceConfig | None) -> None:
