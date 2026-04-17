@@ -17,7 +17,9 @@ disable=
     missing-class-docstring,
     missing-function-docstring,
     too-many-return-statements,
-    unused-argument
+    unused-argument,
+    arguments-differ,
+    unused-variable
 
 [STRING]
 
