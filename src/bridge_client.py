@@ -120,7 +120,8 @@ class BridgeClient:
                 if attempt == 1:
                     _LOG.warning(
                         "Cannot reach bridge at %s — check host/port and firewall. Error: %s",
-                        self._ws_url, exc,
+                        self._ws_url,
+                        exc,
                     )
                 else:
                     _LOG.debug("Bridge WS error (attempt %d): %s", attempt, exc)
