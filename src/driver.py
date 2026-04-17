@@ -155,7 +155,14 @@ async def _on_connect() -> None:
     await api.set_device_state(ucapi.DeviceStates.CONNECTED)
     for device_id, client in _clients.items():
         if not client.connected:
+            _LOG.info("Starting bridge client for device %s", device_id)
             client.start()
+        else:
+            # Already connected — push fresh state so remote is up to date
+            current = await client.fetch_state()
+            if current:
+                handler = _make_state_handler(device_id)
+                await handler(current, True)
 
 
 @api.listens_to(ucapi.Events.DISCONNECT)
@@ -189,13 +196,42 @@ async def _on_exit_standby() -> None:
 
 @api.listens_to(ucapi.Events.SUBSCRIBE_ENTITIES)
 async def _on_subscribe(entity_ids: list[str]) -> None:
+    """
+    Called when the UC Remote subscribes to entities (e.g. adds them to a profile,
+    or reconnects after a restart).  Start the bridge connection for each device
+    and immediately push the current state so the remote doesn't stay at 'unknown'.
+    """
+    started: set[str] = set()
+
     for eid in entity_ids:
-        # Extract device_id from any entity id pattern: <type>.<device_id>[.<key>]
+        # entity IDs: media_player.<dev_id>  |  sensor.<dev_id>.<key>  |  select.<dev_id>.<type>
         parts = eid.split(".", 2)
         device_id = parts[1] if len(parts) >= 2 else eid
+        if device_id in started:
+            continue
+
         client = _clients.get(device_id)
-        if client and not client.connected:
+        if not client:
+            continue
+
+        started.add(device_id)
+        _LOG.info("Subscribe: device %s (connected=%s)", device_id, client.connected)
+
+        if not client.connected:
             client.start()
+            # The bridge sends state_full on WS connect — wait briefly so the
+            # first message arrives and populates the entities before the remote
+            # finishes its subscription handshake.
+            await asyncio.sleep(0.5)
+
+        # If the client was already connected (e.g. integration restart), fetch
+        # the current state explicitly and push it to all entities for this device.
+        if client.connected:
+            current = await client.fetch_state()
+            if current:
+                _LOG.info("Subscribe: pushing current state to device %s", device_id)
+                handler = _make_state_handler(device_id)
+                await handler(current, True)
 
 
 @api.listens_to(ucapi.Events.UNSUBSCRIBE_ENTITIES)

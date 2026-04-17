@@ -108,20 +108,29 @@ class BridgeClient:
         return self._session
 
     async def _connect_loop(self) -> None:
+        attempt = 0
         while self._running:
             try:
+                attempt += 1
                 await self._connect()
+                attempt = 0  # reset on clean disconnect
             except asyncio.CancelledError:
                 return
             except Exception as exc:
-                _LOG.debug("Bridge WS error: %s", exc)
+                if attempt == 1:
+                    _LOG.warning(
+                        "Cannot reach bridge at %s — check host/port and firewall. Error: %s",
+                        self._ws_url, exc,
+                    )
+                else:
+                    _LOG.debug("Bridge WS error (attempt %d): %s", attempt, exc)
 
             self._connected = False
 
             if not self._running:
                 return
 
-            _LOG.info("Bridge disconnected, reconnecting in %ss…", RECONNECT_DELAY)
+            _LOG.info("Bridge disconnected, retry #%d in %ss…", attempt, RECONNECT_DELAY)
             await asyncio.sleep(RECONNECT_DELAY)
 
     async def _connect(self) -> None:
