@@ -16,6 +16,12 @@ from const import DEFAULT_BRIDGE_HOST, DEFAULT_BRIDGE_PORT
 
 _LOG = logging.getLogger(__name__)
 
+# Namespace for deterministic device UUIDs derived from host:port.
+# Using the standard URL namespace (uuid.NAMESPACE_URL) so the same
+# bridge endpoint always hashes to the same UUID, keeping entity IDs
+# stable across integration reinstalls.
+_UUID_NS = uuid.NAMESPACE_URL
+
 
 async def driver_setup_handler(msg: ucapi.SetupDriver, api: IntegrationAPI) -> ucapi.SetupAction:
     """Handle setup flow steps."""
@@ -65,11 +71,11 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
     except ValueError:
         port = DEFAULT_BRIDGE_PORT
 
-    # Reuse the existing device ID when re-running setup so that entity IDs
-    # stay stable and the UC Remote's existing subscriptions remain valid.
-    # A fresh UUID is only generated when no device has been configured yet.
-    existing = list(config.devices.all()) if config.devices else []
-    device_id = existing[0].id if existing else str(uuid.uuid4())
+    # Derive a deterministic device ID from host:port so entity IDs remain
+    # identical across integration reinstalls.  The UC Remote stores activity /
+    # profile assignments by entity ID, so a stable UUID means users never have
+    # to re-map entities after upgrading or reinstalling the integration.
+    device_id = str(uuid.uuid5(_UUID_NS, f"{host}:{port}"))
     cfg = DeviceConfig(id=device_id, name=name, bridge_host=host, bridge_port=port)
 
     if config.devices:
