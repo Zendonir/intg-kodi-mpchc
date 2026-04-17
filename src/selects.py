@@ -17,9 +17,9 @@ from bridge_client import BridgeClient
 
 # Mapping: select_type → (bridge tracks key, bridge command name, bridge current-index key)
 _TYPE_MAP: dict[str, tuple[str, str, str]] = {
-    "audio":    ("audio_tracks",    "audio_track",    "current_audio"),
+    "audio": ("audio_tracks", "audio_track", "current_audio"),
     "subtitle": ("subtitle_tracks", "subtitle_track", "current_subtitle"),
-    "chapter":  ("chapters",        "chapter",        "current_chapter"),
+    "chapter": ("chapters", "chapter", "current_chapter"),
 }
 
 _SUBTITLE_OFF = "Off"

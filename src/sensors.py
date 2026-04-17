@@ -14,32 +14,38 @@ from ucapi.sensor import Attributes, DeviceClasses, Options, States
 # (state_key, English name, device_class, unit, decimals)
 SENSOR_DEFS: list[tuple[str, str, DeviceClasses, str | None, int | None]] = [
     # Playback
-    ("active_player",       "Active Player",   DeviceClasses.CUSTOM, None,    None),
-    ("state",               "Playback State",  DeviceClasses.CUSTOM, None,    None),
-    ("title",               "Title",           DeviceClasses.CUSTOM, None,    None),
-    ("artist",              "Artist",          DeviceClasses.CUSTOM, None,    None),
-    ("album",               "Album",           DeviceClasses.CUSTOM, None,    None),
-    ("media_type",          "Media Type",      DeviceClasses.CUSTOM, None,    None),
-    ("position",            "Position",        DeviceClasses.CUSTOM, "s",     0),
-    ("duration",            "Duration",        DeviceClasses.CUSTOM, "s",     0),
-    ("volume",              "Volume",          DeviceClasses.CUSTOM, "%",     0),
-    ("muted",               "Muted",           DeviceClasses.BINARY, None,    None),
-    ("shuffle",             "Shuffle",         DeviceClasses.BINARY, None,    None),
-    ("repeat",              "Repeat",          DeviceClasses.CUSTOM, None,    None),
+    ("active_player", "Active Player", DeviceClasses.CUSTOM, None, None),
+    ("state", "Playback State", DeviceClasses.CUSTOM, None, None),
+    ("title", "Title", DeviceClasses.CUSTOM, None, None),
+    ("artist", "Artist", DeviceClasses.CUSTOM, None, None),
+    ("album", "Album", DeviceClasses.CUSTOM, None, None),
+    ("media_type", "Media Type", DeviceClasses.CUSTOM, None, None),
+    ("position", "Position", DeviceClasses.CUSTOM, "s", 0),
+    ("duration", "Duration", DeviceClasses.CUSTOM, "s", 0),
+    ("volume", "Volume", DeviceClasses.CUSTOM, "%", 0),
+    ("muted", "Muted", DeviceClasses.BINARY, None, None),
+    ("shuffle", "Shuffle", DeviceClasses.BINARY, None, None),
+    ("repeat", "Repeat", DeviceClasses.CUSTOM, None, None),
     # Video / stream info
-    ("video_width",         "Width",           DeviceClasses.CUSTOM, "px",    0),
-    ("video_height",        "Height",          DeviceClasses.CUSTOM, "px",    0),
-    ("video_fps",           "Frame Rate",      DeviceClasses.CUSTOM, "fps",   3),
-    ("hdr",                 "HDR",             DeviceClasses.CUSTOM, None,    None),
-    ("video_codec",         "Video Codec",     DeviceClasses.CUSTOM, None,    None),
-    ("video_bitrate_kbps",  "Bitrate",         DeviceClasses.CUSTOM, "kbps",  0),
+    ("video_width", "Width", DeviceClasses.CUSTOM, "px", 0),
+    ("video_height", "Height", DeviceClasses.CUSTOM, "px", 0),
+    ("video_fps", "Frame Rate", DeviceClasses.CUSTOM, "fps", 3),
+    ("hdr", "HDR", DeviceClasses.CUSTOM, None, None),
+    ("video_codec", "Video Codec", DeviceClasses.CUSTOM, None, None),
+    ("video_bitrate_kbps", "Bitrate", DeviceClasses.CUSTOM, "kbps", 0),
 ]
 
 
-_ZERO_IS_EMPTY = frozenset({
-    "video_width", "video_height", "video_fps", "video_bitrate_kbps",
-    "position", "duration",
-})
+_ZERO_IS_EMPTY = frozenset(
+    {
+        "video_width",
+        "video_height",
+        "video_fps",
+        "video_bitrate_kbps",
+        "position",
+        "duration",
+    }
+)
 
 
 def _format_value(state_key: str, raw: Any) -> str:

@@ -46,9 +46,9 @@ _selects: dict[str, list[BridgeSelect]] = {}
 
 # Select entity definitions: (select_type, English name)
 _SELECT_DEFS = [
-    ("audio",    "Audio Track"),
+    ("audio", "Audio Track"),
     ("subtitle", "Subtitle"),
-    ("chapter",  "Chapter"),
+    ("chapter", "Chapter"),
 ]
 
 
