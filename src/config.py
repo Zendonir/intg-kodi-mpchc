@@ -68,8 +68,8 @@ class Devices:
         else:
             self._config.append(cfg)
             self.store()
-        if self._add:
-            self._add(cfg)
+            if self._add:
+                self._add(cfg)
 
     def update(self, cfg: DeviceConfig) -> bool:
         for d in self._config:

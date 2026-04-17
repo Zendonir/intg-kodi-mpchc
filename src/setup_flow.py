@@ -65,7 +65,11 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
     except ValueError:
         port = DEFAULT_BRIDGE_PORT
 
-    device_id = str(uuid.uuid4())
+    # Reuse the existing device ID when re-running setup so that entity IDs
+    # stay stable and the UC Remote's existing subscriptions remain valid.
+    # A fresh UUID is only generated when no device has been configured yet.
+    existing = list(config.devices.all()) if config.devices else []
+    device_id = existing[0].id if existing else str(uuid.uuid4())
     cfg = DeviceConfig(id=device_id, name=name, bridge_host=host, bridge_port=port)
 
     if config.devices:
