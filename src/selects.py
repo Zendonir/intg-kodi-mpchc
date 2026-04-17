@@ -41,13 +41,23 @@ class BridgeSelect(Select):
         self._tracks: list[dict[str, Any]] = []
         self._current_idx: int = -1 if select_type == "subtitle" else 0
 
+        if select_type == "subtitle":
+            initial_options = [_SUBTITLE_OFF]
+            initial_current = _SUBTITLE_OFF
+        elif select_type == "chapter":
+            initial_options = ["—"]
+            initial_current = "—"
+        else:
+            initial_options = []
+            initial_current = ""
+
         super().__init__(
             f"select.{device_id}.{select_type}",
             {"en": name},
             {
                 Attributes.STATE: States.ON,
-                Attributes.CURRENT_OPTION: _SUBTITLE_OFF if select_type == "subtitle" else "",
-                Attributes.OPTIONS: [_SUBTITLE_OFF] if select_type == "subtitle" else [],
+                Attributes.CURRENT_OPTION: initial_current,
+                Attributes.OPTIONS: initial_options,
             },
             cmd_handler=self._handle_command,
         )
@@ -83,7 +93,7 @@ class BridgeSelect(Select):
         return StatusCodes.OK if ok else StatusCodes.SERVER_ERROR
 
     async def _select_option(self, option: str) -> bool:
-        _, bridge_cmd = _TYPE_MAP[self._select_type]
+        _, bridge_cmd, _ = _TYPE_MAP[self._select_type]
 
         if self._select_type == "subtitle" and option in (_SUBTITLE_OFF, "", "off"):
             return await self._client.send_command(bridge_cmd, -1)
@@ -121,7 +131,12 @@ class BridgeSelect(Select):
             self._current_idx = patch[current_key]
 
         labels = [t.get("label", f"Track {i}") for i, t in enumerate(self._tracks)]
-        options = ([_SUBTITLE_OFF] + labels) if self._select_type == "subtitle" else labels
+        if self._select_type == "subtitle":
+            options = [_SUBTITLE_OFF] + labels
+        elif self._select_type == "chapter":
+            options = labels if labels else ["—"]
+        else:
+            options = labels
 
         if self._select_type == "subtitle":
             if self._current_idx < 0 or self._current_idx >= len(self._tracks):
@@ -132,7 +147,8 @@ class BridgeSelect(Select):
             if 0 <= self._current_idx < len(self._tracks):
                 current_label = self._tracks[self._current_idx].get("label", "")
             else:
-                current_label = labels[0] if labels else ""
+                fallback = "—" if self._select_type == "chapter" else ""
+                current_label = labels[0] if labels else fallback
 
         attrs: dict[str, Any] = {
             Attributes.OPTIONS: options,
