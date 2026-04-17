@@ -41,23 +41,16 @@ class BridgeSelect(Select):
         self._tracks: list[dict[str, Any]] = []
         self._current_idx: int = -1 if select_type == "subtitle" else 0
 
-        if select_type == "subtitle":
-            initial_options = [_SUBTITLE_OFF]
-            initial_current = _SUBTITLE_OFF
-        elif select_type == "chapter":
-            initial_options = ["—"]
-            initial_current = "—"
-        else:
-            initial_options = []
-            initial_current = ""
-
+        # All selects start empty — the UC Remote hides selects that have
+        # exactly 1 option at registration time.  Real options arrive via
+        # apply_state() once the bridge pushes state.
         super().__init__(
             f"select.{device_id}.{select_type}",
             {"en": name},
             {
                 Attributes.STATE: States.ON,
-                Attributes.CURRENT_OPTION: initial_current,
-                Attributes.OPTIONS: initial_options,
+                Attributes.CURRENT_OPTION: "",
+                Attributes.OPTIONS: [],
             },
             cmd_handler=self._handle_command,
         )
@@ -133,8 +126,6 @@ class BridgeSelect(Select):
         labels = [t.get("label", f"Track {i}") for i, t in enumerate(self._tracks)]
         if self._select_type == "subtitle":
             options = [_SUBTITLE_OFF] + labels
-        elif self._select_type == "chapter":
-            options = labels if labels else ["—"]
         else:
             options = labels
 
@@ -147,8 +138,7 @@ class BridgeSelect(Select):
             if 0 <= self._current_idx < len(self._tracks):
                 current_label = self._tracks[self._current_idx].get("label", "")
             else:
-                fallback = "—" if self._select_type == "chapter" else ""
-                current_label = labels[0] if labels else fallback
+                current_label = labels[0] if labels else ""
 
         attrs: dict[str, Any] = {
             Attributes.OPTIONS: options,
