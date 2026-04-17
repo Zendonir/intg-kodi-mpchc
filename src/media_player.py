@@ -4,17 +4,16 @@ UC Remote media player entity backed by the bridge hub.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
-from ucapi import EntityTypes, MediaPlayer, StatusCodes
+from ucapi import MediaPlayer, StatusCodes
 from ucapi.media_player import (
     Attributes,
     Commands,
     DeviceClasses,
     Features,
-    MediaType,
+    MediaContentType,
     States,
 )
 
@@ -63,13 +62,13 @@ _STATE_MAP = {
     "idle": States.STANDBY,
 }
 
-# bridge media_type → ucapi MediaType
+# bridge media_type → ucapi MediaContentType
 _MEDIA_TYPE_MAP = {
-    "movie": MediaType.MOVIE,
-    "episode": MediaType.TVSHOW,
-    "music": MediaType.MUSIC,
-    "other": MediaType.VIDEO,
-    "": MediaType.VIDEO,
+    "movie": MediaContentType.MOVIE,
+    "episode": MediaContentType.TV_SHOW,
+    "music": MediaContentType.MUSIC,
+    "other": MediaContentType.VIDEO,
+    "": MediaContentType.VIDEO,
 }
 
 
@@ -88,7 +87,7 @@ class BridgeMediaPlayer(MediaPlayer):
             _FEATURES,
             {
                 Attributes.STATE: States.STANDBY,
-                Attributes.MEDIA_TYPE: MediaType.VIDEO,
+                Attributes.MEDIA_TYPE: MediaContentType.VIDEO,
                 Attributes.VOLUME: 0,
                 Attributes.MUTED: False,
                 Attributes.SHUFFLE: False,
@@ -129,7 +128,7 @@ class BridgeMediaPlayer(MediaPlayer):
             attrs[Attributes.MEDIA_IMAGE_URL] = patch["artwork_url"]
         if "media_type" in patch:
             attrs[Attributes.MEDIA_TYPE] = _MEDIA_TYPE_MAP.get(
-                patch["media_type"], MediaType.VIDEO
+                patch["media_type"], MediaContentType.VIDEO
             )
         if "volume" in patch:
             attrs[Attributes.VOLUME] = patch["volume"]
@@ -164,7 +163,7 @@ class BridgeMediaPlayer(MediaPlayer):
             Commands.VOLUME_UP:     ("volume_up", None),
             Commands.VOLUME_DOWN:   ("volume_down", None),
             Commands.MUTE_TOGGLE:   ("mute", None),
-            Commands.SHUFFLE_TOGGLE: ("shuffle", None),
+            Commands.SHUFFLE: ("shuffle", None),
             Commands.CURSOR_UP:     ("navigate_up", None),
             Commands.CURSOR_DOWN:   ("navigate_down", None),
             Commands.CURSOR_LEFT:   ("navigate_left", None),

@@ -20,7 +20,6 @@ from ucapi import IntegrationAPI
 import config
 from bridge_client import BridgeClient
 from config import DeviceConfig, Devices
-from const import DRIVER_ID, DRIVER_NAME, INTEGRATION_VERSION
 from media_player import BridgeMediaPlayer
 from setup_flow import driver_setup_handler
 
@@ -121,7 +120,7 @@ async def _on_standby() -> None:
 
 @api.listens_to(ucapi.Events.EXIT_STANDBY)
 async def _on_exit_standby() -> None:
-    for device_id in list(_clients):
+    for device_id, _ in _clients.items():
         cfg = config.devices.get(device_id) if config.devices else None
         if not cfg:
             continue
@@ -149,21 +148,6 @@ async def _on_subscribe(entity_ids: list[str]) -> None:
 @api.listens_to(ucapi.Events.UNSUBSCRIBE_ENTITIES)
 async def _on_unsubscribe(entity_ids: list[str]) -> None:
     pass  # keep connection alive; bridge is lightweight
-
-
-# ---------------------------------------------------------------------------
-# Entity command handler
-# ---------------------------------------------------------------------------
-@api.listens_to(ucapi.Events.ENTITY_COMMAND)
-async def _on_entity_command(
-    websocket, req_id: str, entity_id: str, cmd_id: str, params: dict | None
-) -> None:
-    player = _players.get(entity_id.replace("media_player.", ""))
-    if player is None:
-        await api.acknowledge_command(websocket, req_id, ucapi.StatusCodes.NOT_FOUND)
-        return
-    result = await player.command(cmd_id, params)
-    await api.acknowledge_command(websocket, req_id, result)
 
 
 # ---------------------------------------------------------------------------

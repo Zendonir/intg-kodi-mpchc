@@ -8,7 +8,7 @@ import logging
 import uuid
 
 import ucapi
-from ucapi import IntegrationAPI, SetupError
+from ucapi import IntegrationAPI
 
 from config import DeviceConfig, devices
 from const import DEFAULT_BRIDGE_HOST, DEFAULT_BRIDGE_PORT
@@ -56,7 +56,7 @@ async def driver_setup_handler(msg: ucapi.SetupDriver, api: IntegrationAPI) -> u
 
 
 async def _handle_user_data(
-    msg: ucapi.UserDataResponse, api: IntegrationAPI
+    msg: ucapi.UserDataResponse, _api: IntegrationAPI
 ) -> ucapi.SetupAction:
     inp = msg.input_values or {}
     name = inp.get("name", "Kodi / MPC-HC").strip() or "Kodi / MPC-HC"
@@ -77,7 +77,7 @@ async def _handle_user_data(
 
 
 async def reconfigure_handler(
-    msg: ucapi.SetupDriver, api: IntegrationAPI, device_id: str
+    msg: ucapi.SetupDriver, _api: IntegrationAPI, device_id: str
 ) -> ucapi.SetupAction:
     """Handle device reconfiguration."""
     cfg = devices.get(device_id) if devices else None

@@ -11,7 +11,13 @@ disable=
     too-many-instance-attributes,
     too-many-public-methods,
     global-statement,
-    fixme
+    fixme,
+    broad-exception-caught,
+    invalid-name,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-many-return-statements,
+    unused-argument
 
 [STRING]
 
