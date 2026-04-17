@@ -121,15 +121,20 @@ async def _on_standby() -> None:
 
 @api.listens_to(ucapi.Events.EXIT_STANDBY)
 async def _on_exit_standby() -> None:
-    for device_id, client in _clients.items():
+    for device_id in list(_clients):
         cfg = config.devices.get(device_id) if config.devices else None
-        if cfg:
-            _clients[device_id] = BridgeClient(
-                host=cfg.bridge_host,
-                port=cfg.bridge_port,
-                on_state=_make_state_handler(device_id),
-            )
-            _clients[device_id].start()
+        if not cfg:
+            continue
+        old = _clients.get(device_id)
+        if old:
+            await old.stop()
+        new_client = BridgeClient(
+            host=cfg.bridge_host,
+            port=cfg.bridge_port,
+            on_state=_make_state_handler(device_id),
+        )
+        _clients[device_id] = new_client
+        new_client.start()
 
 
 @api.listens_to(ucapi.Events.SUBSCRIBE_ENTITIES)

@@ -18,7 +18,7 @@ class DeviceConfig:
     id: str
     name: str
     bridge_host: str = field(default="localhost")
-    bridge_port: int = field(default=13580)
+    bridge_port: int = field(default=13590)
 
     def __post_init__(self) -> None:
         for f in fields(self):
