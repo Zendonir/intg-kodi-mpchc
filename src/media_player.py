@@ -46,12 +46,9 @@ _FEATURES = [
     Features.SEEK,
     Features.DPAD,
     Features.NUMPAD,
-    Features.SELECT_SOURCE,
     Features.CONTEXT_MENU,
     Features.INFO,
     Features.SETTINGS,
-    Features.SUBTITLE,
-    Features.AUDIO_TRACK,
 ]
 
 # bridge unified state → ucapi state
@@ -92,8 +89,6 @@ class BridgeMediaPlayer(MediaPlayer):
                 Attributes.MUTED: False,
                 Attributes.SHUFFLE: False,
                 Attributes.REPEAT: "off",
-                Attributes.SOURCE: "",
-                Attributes.SOURCE_LIST: [],
             },
             device_class=DeviceClasses.TV,
         )
@@ -138,14 +133,6 @@ class BridgeMediaPlayer(MediaPlayer):
             attrs[Attributes.SHUFFLE] = patch["shuffle"]
         if "repeat" in patch:
             attrs[Attributes.REPEAT] = patch["repeat"]
-
-        if "audio_tracks" in patch:
-            tracks = self._state.get("audio_tracks", [])
-            source_list = [t.get("label", f"Track {i}") for i, t in enumerate(tracks)]
-            attrs[Attributes.SOURCE_LIST] = source_list
-            active = next((t.get("label") for t in tracks if t.get("active")), None)
-            if active is not None:
-                attrs[Attributes.SOURCE] = active
 
         return attrs
 
@@ -202,25 +189,6 @@ class BridgeMediaPlayer(MediaPlayer):
         if cmd_id == Commands.REPEAT:
             mode = p.get("repeat", "off")
             return await c.send_command("repeat", mode)
-
-        if cmd_id == Commands.SELECT_SOURCE:
-            # source = audio track label; resolve to track index
-            label = p.get("source", "")
-            tracks = self._state.get("audio_tracks", [])
-            for t in tracks:
-                if t.get("label") == label:
-                    return await c.send_command("audio_track", t["pos"])
-            return False
-
-        if cmd_id == Commands.SUBTITLE:
-            label = p.get("subtitle", "")
-            if label.lower() in ("off", ""):
-                return await c.send_command("subtitle_track", -1)
-            tracks = self._state.get("subtitle_tracks", [])
-            for t in tracks:
-                if t.get("label") == label:
-                    return await c.send_command("subtitle_track", t["pos"])
-            return False
 
         _LOG.warning("Unhandled command: %s", cmd_id)
         return False

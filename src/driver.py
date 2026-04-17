@@ -21,6 +21,8 @@ import config
 from bridge_client import BridgeClient
 from config import DeviceConfig, Devices
 from media_player import BridgeMediaPlayer
+from selects import BridgeSelect
+from sensors import SENSOR_DEFS, BridgeSensor
 from setup_flow import driver_setup_handler
 
 _LOG = logging.getLogger(__name__)
@@ -37,15 +39,22 @@ api = IntegrationAPI(_LOOP)
 _clients: dict[str, BridgeClient] = {}
 # device_id → BridgeMediaPlayer
 _players: dict[str, BridgeMediaPlayer] = {}
+# device_id → list of BridgeSensor
+_sensors: dict[str, list[BridgeSensor]] = {}
+# device_id → list of BridgeSelect
+_selects: dict[str, list[BridgeSelect]] = {}
+
+# Select entity definitions: (select_type, English name)
+_SELECT_DEFS = [
+    ("audio",    "Audio Track"),
+    ("subtitle", "Subtitle"),
+    ("chapter",  "Chapter"),
+]
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _entity_id(device_id: str) -> str:
-    return f"media_player.{device_id}"
-
-
 def _add_device(cfg: DeviceConfig) -> None:
     """Create client + entities for a newly configured device."""
     if cfg.id in _clients:
@@ -59,10 +68,27 @@ def _add_device(cfg: DeviceConfig) -> None:
     )
     _clients[cfg.id] = client
 
+    # Media player
     player = BridgeMediaPlayer(cfg, client)
     _players[cfg.id] = player
-
     api.available_entities.add(player)
+
+    # Sensor entities (one per bridge state field)
+    sensors: list[BridgeSensor] = []
+    for state_key, name, device_class, unit, decimals in SENSOR_DEFS:
+        sensor = BridgeSensor(cfg.id, state_key, name, device_class, unit, decimals)
+        api.available_entities.add(sensor)
+        sensors.append(sensor)
+    _sensors[cfg.id] = sensors
+
+    # Select entities (audio track, subtitle, chapter)
+    selects: list[BridgeSelect] = []
+    for sel_type, sel_name in _SELECT_DEFS:
+        sel = BridgeSelect(cfg.id, sel_type, sel_name, client)
+        api.available_entities.add(sel)
+        selects.append(sel)
+    _selects[cfg.id] = selects
+
     _LOG.info("Device added: %s (%s:%d)", cfg.name, cfg.bridge_host, cfg.bridge_port)
 
 
@@ -75,6 +101,10 @@ def _remove_device(cfg: DeviceConfig | None) -> None:
     player = _players.pop(cfg.id, None)
     if player:
         api.available_entities.remove(player.id)
+    for sensor in _sensors.pop(cfg.id, []):
+        api.available_entities.remove(sensor.id)
+    for sel in _selects.pop(cfg.id, []):
+        api.available_entities.remove(sel.id)
     _LOG.info("Device removed: %s", cfg.id)
 
 
@@ -85,12 +115,24 @@ def _update_device(cfg: DeviceConfig) -> None:
 
 def _make_state_handler(device_id: str):
     async def _on_state(state: dict[str, Any], is_full: bool) -> None:
+        # Media player
         player = _players.get(device_id)
-        if player is None:
-            return
-        attrs = player.apply_state(state)
-        if attrs:
-            api.configured_entities.update_attributes(player.id, attrs)
+        if player:
+            attrs = player.apply_state(state)
+            if attrs:
+                api.configured_entities.update_attributes(player.id, attrs)
+
+        # Sensors
+        for sensor in _sensors.get(device_id, []):
+            attrs = sensor.apply_state(state)
+            if attrs:
+                api.configured_entities.update_attributes(sensor.id, attrs)
+
+        # Selects
+        for sel in _selects.get(device_id, []):
+            attrs = sel.apply_state(state)
+            if attrs:
+                api.configured_entities.update_attributes(sel.id, attrs)
 
     return _on_state
 
@@ -102,7 +144,6 @@ def _make_state_handler(device_id: str):
 async def _on_connect() -> None:
     _LOG.info("UC Remote connected")
     await api.set_device_state(ucapi.DeviceStates.CONNECTED)
-    # Start all clients
     for device_id, client in _clients.items():
         if not client.connected:
             client.start()
@@ -140,7 +181,9 @@ async def _on_exit_standby() -> None:
 @api.listens_to(ucapi.Events.SUBSCRIBE_ENTITIES)
 async def _on_subscribe(entity_ids: list[str]) -> None:
     for eid in entity_ids:
-        device_id = eid.replace("media_player.", "")
+        # Extract device_id from any entity id pattern: <type>.<device_id>[.<key>]
+        parts = eid.split(".", 2)
+        device_id = parts[1] if len(parts) >= 2 else eid
         client = _clients.get(device_id)
         if client and not client.connected:
             client.start()
