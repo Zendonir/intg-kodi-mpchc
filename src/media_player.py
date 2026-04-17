@@ -134,6 +134,13 @@ class BridgeMediaPlayer(MediaPlayer):
         if "repeat" in patch:
             attrs[Attributes.REPEAT] = patch["repeat"]
 
+        if "audio_tracks" in patch or "current_audio" in patch:
+            tracks = self._state.get("audio_tracks", [])
+            cur_idx = self._state.get("current_audio", 0)
+            attrs[Attributes.SOURCE_LIST] = [t.get("label", f"Track {i}") for i, t in enumerate(tracks)]
+            if 0 <= cur_idx < len(tracks):
+                attrs[Attributes.SOURCE] = tracks[cur_idx].get("label", "")
+
         return attrs
 
     # ------------------------------------------------------------------
