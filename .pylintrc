@@ -1,0 +1,18 @@
+[FORMAT]
+
+# Maximum number of characters on a single line.
+max-line-length=120
+
+[MESSAGES CONTROL]
+
+disable=
+    too-many-arguments,
+    too-many-branches,
+    too-many-instance-attributes,
+    too-many-public-methods,
+    global-statement,
+    fixme
+
+[STRING]
+
+check-quote-consistency=yes

@@ -1,0 +1,17 @@
+.git
+.github
+*.tar.gz
+dist
+build
+*.pyc
+__pycache__
+.pytest_cache
+.venv
+venv
+config
+.gitignore
+.pylintrc
+CHANGELOG.md
+LICENSE
+setup.cfg
+test-requirements.txt

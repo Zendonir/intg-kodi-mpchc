@@ -2,10 +2,18 @@
   "driver_id": "kodi-mpchc-bridge",
   "version": "0.1.0",
   "min_core_api": "0.20.0",
-  "name": {"en": "Kodi / MPC-HC Bridge"},
-  "icon": "uc:integration",
-  "description": {"en": "Integration bridge for Kodi and MPC-HC."},
+  "name": {
+    "en": "Kodi / MPC-HC Bridge"
+  },
+  "icon": "uc:mediaplayer",
+  "description": {
+    "en": "UC Remote integration bridge for Kodi and MPC-HC. Connects to a lightweight hub running on the same PC as Kodi/MPC-HC and exposes a full media-player entity."
+  },
   "port": 9090,
-  "developer": {"name": ""},
+  "developer": {
+    "name": "Zendonir",
+    "url": "https://github.com/Zendonir"
+  },
+  "home_page": "https://github.com/Zendonir/intg-kodi-mpchc",
   "release_date": "2026-04-17"
 }

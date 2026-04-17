@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intg-kodi-mpchc"
+version = "0.1.0"
+authors = [
+    { name = "Zendonir", email = "zendonir@github.com" }
+]
+license = { text = "MPL-2.0" }
+description = "UC Remote integration bridge for Kodi and MPC-HC"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Operating System :: OS Independent",
+    "Topic :: Home Automation",
+    "Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "ucapi>=0.12.0",
+    "aiohttp>=3.9.0",
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown; charset=UTF-8"
+
+[project.optional-dependencies]
+testing = [
+    "pylint",
+    "flake8",
+    "black",
+    "isort",
+]
+
+[tool.setuptools]
+platforms = ["any"]
+license-files = ["LICENSE"]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+exclude = ["tests"]
+namespaces = false
+
+[tool.isort]
+profile = "black"
