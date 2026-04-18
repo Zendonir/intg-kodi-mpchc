@@ -43,6 +43,8 @@ SENSOR_DEFS: list[tuple[str, str, DeviceClasses, str | None, int | None]] = [
     ("hdr", "HDR", DeviceClasses.CUSTOM, None, None),
     ("video_codec", "Video Codec", DeviceClasses.CUSTOM, None, None),
     ("video_bitrate_kbps", "Bitrate", DeviceClasses.CUSTOM, "kbps", 0),
+    # Bridge / integration state
+    ("external_player_enabled", "External Player", DeviceClasses.BINARY, None, None),
 ]
 
 
@@ -65,10 +67,23 @@ _ZERO_IS_EMPTY = frozenset(
 )
 
 
+# Map EBML video codec IDs to human-readable names.
+_VIDEO_CODEC_MAP: dict[str, str] = {
+    "V_MPEGH/ISO/HEVC": "HEVC",
+    "V_MPEG4/ISO/AVC": "AVC",
+    "V_AV1": "AV1",
+    "V_VP9": "VP9",
+    "V_VP8": "VP8",
+    "V_MPEG2": "MPEG-2",
+    "V_MPEG1": "MPEG-1",
+    "V_REAL/RV40": "RealVideo",
+    "V_MS/VFW/FOURCC": "VC-1",
+    "V_THEORA": "Theora",
+}
+
+
 def _format_value(state_key: str, raw: Any) -> str:
     """Convert a raw bridge value to a display-friendly string."""
-    if state_key in ("muted", "shuffle"):
-        return "On" if raw else "Off"
     if isinstance(raw, bool):
         return "On" if raw else "Off"
     # Show nothing for numeric "zero" fields when nothing is playing
@@ -77,6 +92,9 @@ def _format_value(state_key: str, raw: Any) -> str:
     # Show SDR instead of empty string for HDR field
     if state_key == "hdr":
         return raw if raw else "SDR"
+    # Translate raw EBML codec IDs to friendly names
+    if state_key == "video_codec" and isinstance(raw, str):
+        return _VIDEO_CODEC_MAP.get(raw, raw)
     return str(raw) if raw is not None else ""
 
 
