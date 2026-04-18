@@ -32,9 +32,11 @@ class BridgeClient:
     """
 
     def __init__(self, host: str, port: int, on_state: StateCallback) -> None:
+        _base = f"http://{host}:{port}"
         self._ws_url = f"ws://{host}:{port}/api/ws"
-        self._cmd_url = f"http://{host}:{port}/api/command"
-        self._state_url = f"http://{host}:{port}/api/state"
+        self._cmd_url = f"{_base}/api/command"
+        self._state_url = f"{_base}/api/state"
+        self._external_play_url = f"{_base}/api/external_play"
         self._on_state = on_state
         self._session: aiohttp.ClientSession | None = None
         self._running = False
@@ -83,6 +85,24 @@ class BridgeClient:
                 return resp.status == 200
         except Exception as exc:
             _LOG.debug("Command %s failed: %s", cmd, exc)
+            return False
+
+    async def play_episode(self, filepath: str) -> bool:
+        """POST /api/external_play to start playback of a specific file.
+
+        The bridge shows a resume dialog when applicable and launches the
+        external player (MPC-HC) at the saved resume position.
+        """
+        try:
+            session = await self._get_session()
+            async with session.post(
+                self._external_play_url,
+                json={"filepath": filepath},
+                timeout=aiohttp.ClientTimeout(total=5.0),
+            ) as resp:
+                return resp.status == 200
+        except Exception as exc:
+            _LOG.debug("play_episode failed: %s", exc)
             return False
 
     async def fetch_state(self) -> dict[str, Any] | None:

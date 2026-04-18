@@ -21,7 +21,7 @@ import config
 from bridge_client import BridgeClient
 from config import DeviceConfig, Devices
 from media_player import BridgeMediaPlayer
-from selects import BridgeSelect
+from selects import BridgeEpisodeSelect, BridgeSelect
 from sensors import SENSOR_DEFS, BridgeSensor
 from setup_flow import driver_setup_handler
 
@@ -41,8 +41,10 @@ _clients: dict[str, BridgeClient] = {}
 _players: dict[str, BridgeMediaPlayer] = {}
 # device_id → list of BridgeSensor
 _sensors: dict[str, list[BridgeSensor]] = {}
-# device_id → list of BridgeSelect
+# device_id → list of BridgeSelect (audio / subtitle / chapter)
 _selects: dict[str, list[BridgeSelect]] = {}
+# device_id → BridgeEpisodeSelect
+_episode_selects: dict[str, BridgeEpisodeSelect] = {}
 
 # Select entity definitions: (select_type, English name)
 _SELECT_DEFS = [
@@ -92,12 +94,18 @@ def _add_device(cfg: DeviceConfig) -> None:
         selects.append(sel)
     _selects[cfg.id] = selects
 
+    # Episode select (Kodi TV season navigation)
+    ep_sel = BridgeEpisodeSelect(cfg.id, client)
+    ep_sel.device_id = cfg.id
+    api.available_entities.add(ep_sel)
+    _episode_selects[cfg.id] = ep_sel
+
     _LOG.info(
         "Device added: %s (%s:%d) — %d entities registered",
         cfg.name,
         cfg.bridge_host,
         cfg.bridge_port,
-        1 + len(sensors) + len(selects),
+        1 + len(sensors) + len(selects) + 1,  # +1 for episode select
     )
 
 
@@ -114,6 +122,9 @@ def _remove_device(cfg: DeviceConfig | None) -> None:
         api.available_entities.remove(sensor.id)
     for sel in _selects.pop(cfg.id, []):
         api.available_entities.remove(sel.id)
+    ep_sel = _episode_selects.pop(cfg.id, None)
+    if ep_sel:
+        api.available_entities.remove(ep_sel.id)
     _LOG.info("Device removed: %s", cfg.id)
 
 
@@ -137,11 +148,18 @@ def _make_state_handler(device_id: str):
             if attrs:
                 api.configured_entities.update_attributes(sensor.id, attrs)
 
-        # Selects
+        # Selects (audio / subtitle / chapter)
         for sel in _selects.get(device_id, []):
             attrs = sel.apply_state(state)
             if attrs:
                 api.configured_entities.update_attributes(sel.id, attrs)
+
+        # Episode select (Kodi season navigation)
+        ep_sel = _episode_selects.get(device_id)
+        if ep_sel:
+            attrs = ep_sel.apply_state(state)
+            if attrs:
+                api.configured_entities.update_attributes(ep_sel.id, attrs)
 
     return _on_state
 

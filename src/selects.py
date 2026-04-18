@@ -39,6 +39,121 @@ def _track_label(track: dict[str, Any], idx: int) -> str:
     return track.get("label") or track.get("name") or f"Track {idx}"
 
 
+class BridgeEpisodeSelect(Select):
+    """Select entity for navigating episodes within the current TV season.
+
+    Options are populated from the bridge's ``season_episodes`` state field
+    (available only when Kodi is playing a TV episode).  Selecting an episode
+    calls ``POST /api/external_play`` with the episode's file path, which
+    triggers the bridge's resume dialog and launches MPC-HC.
+    """
+
+    def __init__(self, device_id: str, client: BridgeClient) -> None:
+        self._client = client
+        self._episodes: list[dict[str, Any]] = []
+        self._playlist_index: int = -1
+
+        super().__init__(
+            f"select.{device_id}.episode",
+            {"en": "Episode"},
+            {
+                Attributes.STATE: States.ON,
+                Attributes.CURRENT_OPTION: "",
+                Attributes.OPTIONS: [],
+            },
+            cmd_handler=self._handle_command,
+        )
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _episode_label(self, ep: dict[str, Any]) -> str:
+        """Format ``E01 - Title`` from an episode dict."""
+        num = ep.get("episode", 0)
+        title = ep.get("title", "").strip()
+        if title:
+            return f"E{num:02d} - {title}"
+        return f"Episode {num}"
+
+    def _label_at(self, idx: int) -> str:
+        if 0 <= idx < len(self._episodes):
+            return self._episode_label(self._episodes[idx])
+        return ""
+
+    # ------------------------------------------------------------------
+    # Command handler
+    # ------------------------------------------------------------------
+    async def _handle_command(
+        self,
+        _entity: Select,
+        cmd_id: str,
+        params: dict[str, Any] | None,
+    ) -> StatusCodes:
+        option = (params or {}).get("option", "")
+
+        if cmd_id == Commands.SELECT_OPTION:
+            ok = await self._play_by_label(option)
+        elif cmd_id == Commands.SELECT_NEXT:
+            ok = await self._step(+1)
+        elif cmd_id == Commands.SELECT_PREVIOUS:
+            ok = await self._step(-1)
+        elif cmd_id == Commands.SELECT_FIRST:
+            ok = await self._jump(0)
+        elif cmd_id == Commands.SELECT_LAST:
+            ok = await self._jump(-1)
+        else:
+            return StatusCodes.NOT_IMPLEMENTED
+
+        return StatusCodes.OK if ok else StatusCodes.SERVER_ERROR
+
+    async def _play_by_label(self, label: str) -> bool:
+        for ep in self._episodes:
+            if self._episode_label(ep) == label:
+                filepath = ep.get("file", "")
+                if not filepath:
+                    return False
+                return await self._client.play_episode(filepath)
+        return False
+
+    async def _step(self, direction: int) -> bool:
+        if not self._episodes:
+            return False
+        base = max(self._playlist_index, 0)
+        new_idx = (base + direction) % len(self._episodes)
+        return await self._play_by_label(self._label_at(new_idx))
+
+    async def _jump(self, idx: int) -> bool:
+        if not self._episodes:
+            return False
+        target = idx if idx >= 0 else len(self._episodes) + idx
+        return await self._play_by_label(self._label_at(target))
+
+    # ------------------------------------------------------------------
+    # State updates from bridge
+    # ------------------------------------------------------------------
+    def apply_state(self, patch: dict[str, Any]) -> dict[str, Any]:
+        """Return attribute updates when the episode list or current index changes."""
+        if "season_episodes" not in patch and "playlist_index" not in patch:
+            return {}
+
+        if "season_episodes" in patch:
+            self._episodes = patch["season_episodes"] or []
+        if "playlist_index" in patch:
+            self._playlist_index = patch["playlist_index"]
+
+        labels = [self._episode_label(ep) for ep in self._episodes]
+
+        if 0 <= self._playlist_index < len(self._episodes):
+            current = labels[self._playlist_index]
+        else:
+            current = labels[0] if labels else ""
+
+        return {
+            Attributes.OPTIONS: labels,
+            Attributes.CURRENT_OPTION: current,
+        }
+
+
 class BridgeSelect(Select):
     """UC Remote Select entity for audio / subtitle / chapter selection."""
 
