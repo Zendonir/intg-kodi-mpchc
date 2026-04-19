@@ -10,10 +10,15 @@ from typing import Any
 from ucapi import MediaPlayer, StatusCodes
 from ucapi.media_player import (
     Attributes,
+    BrowseMediaItem,
+    BrowseOptions,
+    BrowseResults,
     Commands,
     DeviceClasses,
     Features,
+    MediaClass,
     MediaContentType,
+    Pagination,
     States,
 )
 
@@ -49,6 +54,9 @@ _FEATURES = [
     Features.CONTEXT_MENU,
     Features.INFO,
     Features.SETTINGS,
+    # Media browser (UC Remote >= 2.9.1)
+    Features.BROWSE_MEDIA,
+    Features.PLAY_MEDIA,
 ]
 
 # bridge unified state → ucapi state
@@ -144,6 +152,64 @@ class BridgeMediaPlayer(MediaPlayer):
         return attrs
 
     # ------------------------------------------------------------------
+    # Media browser
+    # ------------------------------------------------------------------
+    async def browse(self, options: BrowseOptions) -> BrowseResults | StatusCodes:
+        """Return the current season's episode list for the media browser widget."""
+        episodes: list[dict[str, Any]] = self._state.get("season_episodes", [])
+
+        if not episodes:
+            # Nothing to browse right now (movie, music, or idle)
+            return BrowseResults(
+                media=None,
+                pagination=Pagination(page=1, limit=0, count=0),
+            )
+
+        tv_show = self._state.get("tv_show", "")
+        season = self._state.get("season", 0)
+
+        # Build one BrowseMediaItem per episode
+        ep_items: list[BrowseMediaItem] = []
+        for i, ep in enumerate(episodes):
+            watched = ep.get("playcount", 0) > 0
+            resume = ep.get("resume_pos", 0.0)
+            if resume and resume > 60:
+                subtitle = f"{'✓ ' if watched else ''}Resume: {int(resume // 60)}m {int(resume % 60):02d}s"
+            elif watched:
+                subtitle = "✓ Watched"
+            else:
+                subtitle = None
+
+            ep_items.append(
+                BrowseMediaItem(
+                    media_id=str(ep.get("episodeid", i)),
+                    title=f"E{ep.get('episode', i + 1):02d} — {ep.get('title', '')}",
+                    subtitle=subtitle,
+                    media_class=MediaClass.EPISODE,
+                    media_type=MediaContentType.TV_SHOW,
+                    can_browse=False,
+                    can_play=True,
+                    duration=ep.get("runtime"),
+                )
+            )
+
+        season_label = f"S{season:02d} — {tv_show}" if tv_show else f"Season {season}"
+        container = BrowseMediaItem(
+            media_id="season",
+            title=season_label,
+            media_class=MediaClass.SEASON,
+            media_type=MediaContentType.TV_SHOW,
+            can_browse=True,
+            can_play=False,
+            items=ep_items,
+        )
+
+        return BrowseResults(
+            media=container,
+            pagination=Pagination(page=1, limit=len(ep_items), count=len(ep_items)),
+        )
+
+    # ------------------------------------------------------------------
     # Commands
     # ------------------------------------------------------------------
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
@@ -196,6 +262,16 @@ class BridgeMediaPlayer(MediaPlayer):
         if cmd_id == Commands.REPEAT:
             mode = p.get("repeat", "off")
             return await c.send_command("repeat", mode)
+
+        if cmd_id == Commands.PLAY_MEDIA:
+            media_id = str(p.get("media_id", ""))
+            for ep in self._state.get("season_episodes", []):
+                if str(ep.get("episodeid")) == media_id:
+                    filepath = ep.get("file", "")
+                    if filepath:
+                        return await c.play_episode(filepath)
+            _LOG.warning("PLAY_MEDIA: episode not found: %s", media_id)
+            return False
 
         _LOG.warning("Unhandled command: %s", cmd_id)
         return False
