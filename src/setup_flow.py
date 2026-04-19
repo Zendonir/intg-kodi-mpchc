@@ -153,6 +153,7 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
 # Reconfigure
 # ---------------------------------------------------------------------------
 
+
 async def reconfigure_handler(msg: ucapi.SetupDriver, _api: IntegrationAPI, device_id: str) -> ucapi.SetupAction:
     """Handle device reconfiguration."""
     cfg = config.devices.get(device_id) if config.devices else None
