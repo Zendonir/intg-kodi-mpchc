@@ -213,9 +213,7 @@ class BridgeMediaPlayer(MediaPlayer):
         for i, ep in enumerate(episodes):
             is_current = i == playlist_index
             thumbnail = (
-                ep.get("thumbnail")
-                or ep.get("art", {}).get("thumb")
-                or (current_artwork if is_current else None)
+                ep.get("thumbnail") or ep.get("art", {}).get("thumb") or (current_artwork if is_current else None)
             )
             ep_items.append(
                 BrowseMediaItem(
