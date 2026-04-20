@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.9.0 - 2026-04-20
+### Changed
+- **Episode list order restored**: Media browser now shows episodes in their
+  natural order (S01E01 first). The ▶ Now Playing subtitle still marks the
+  active episode.
+- **Color buttons removed**: `COLOR_BUTTONS` feature dropped. The three
+  system-switch actions are now exposed as freely-assignable simple commands
+  instead — assign them to any button in the UC Remote profile editor:
+  - `GOTO_WINDOWS` → switch PC to desktop
+  - `GOTO_KODI`    → switch to Kodi
+  - `RESTART_KODI` → restart Kodi
+  - (PC restart command removed)
+
+---
+
 ## v0.8.1 - 2026-04-20
 ### Fixed
 - **Build CI**: Added `workflow_dispatch` trigger to `build.yml` so the

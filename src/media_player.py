@@ -18,6 +18,7 @@ from ucapi.media_player import (
     Features,
     MediaClass,
     MediaContentType,
+    Options,
     Pagination,
     States,
 )
@@ -54,8 +55,6 @@ _FEATURES = [
     Features.CONTEXT_MENU,
     Features.INFO,
     Features.SETTINGS,
-    # Color function buttons → system/player-switch commands
-    Features.COLOR_BUTTONS,
     # Channel up/down → relative seek (Springe)
     Features.CHANNEL_SWITCHER,
     # Media browser (UC Remote >= 2.9.1)
@@ -103,6 +102,7 @@ class BridgeMediaPlayer(MediaPlayer):
                 Attributes.REPEAT: "off",
             },
             device_class=DeviceClasses.TV,
+            options={Options.SIMPLE_COMMANDS: ["GOTO_WINDOWS", "GOTO_KODI", "RESTART_KODI"]},
         )
 
     # ------------------------------------------------------------------
@@ -245,12 +245,6 @@ class BridgeMediaPlayer(MediaPlayer):
                 )
             )
 
-        # Rotate the list so the currently playing episode is first.  The UC
-        # Remote always focuses the first item when the browser opens, so this
-        # ensures the highlight lands on the active episode automatically.
-        if 0 <= playlist_index < len(ep_items):
-            ep_items = ep_items[playlist_index:] + ep_items[:playlist_index]
-
         season_label = f"S{season:02d} \u2013 {tv_show}" if tv_show else f"Season {season}"
         container = BrowseMediaItem(
             media_id="season",
@@ -303,11 +297,10 @@ class BridgeMediaPlayer(MediaPlayer):
             Commands.CONTEXT_MENU: ("context_menu", None),
             Commands.INFO: ("show_info", None),
             Commands.SETTINGS: ("navigate_home", None),
-            # System / player-switch commands on color function buttons
-            Commands.FUNCTION_GREEN: ("switch_to_kodi", None),
-            Commands.FUNCTION_BLUE: ("switch_to_desktop", None),
-            Commands.FUNCTION_YELLOW: ("restart_kodi", None),
-            Commands.FUNCTION_RED: ("restart_pc", None),
+            # Custom simple commands (assigned freely to buttons on the remote)
+            "GOTO_WINDOWS": ("switch_to_desktop", None),
+            "GOTO_KODI": ("switch_to_kodi", None),
+            "RESTART_KODI": ("restart_kodi", None),
         }
 
         if cmd_id in cmd_map:
