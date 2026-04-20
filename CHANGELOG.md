@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.7.0 - 2026-04-20
+### Added
+- **Browse highlight**: Episode list is now rotated so the currently playing
+  episode is always first — the UC Remote's default focus lands on it automatically.
+- **Thumbnails for all episodes**: `artwork_url` used as fallback thumbnail for
+  every episode in the browser, not just the active one.
+- **New commands** — system/player-switch actions on color buttons:
+  - 🟢 `function_green` → Wechsel zu Kodi (`switch_to_kodi`)
+  - 🔵 `function_blue`  → Wechsel zu Windows (`switch_to_desktop`)
+  - 🟡 `function_yellow`→ Kodi Neustart (`restart_kodi`)
+  - 🔴 `function_red`   → PC neustarten (`restart_pc`)
+- **Springe (relative seek)**: `channel_up` skips +30 s forward,
+  `channel_down` skips -10 s backward. Amount configurable via `seconds` param.
+- **Multi-step setup flow** with 4-option action menu on first page:
+  1. Erstinstallation
+  2. Aus Backup wiederherstellen (paste JSON)
+  3. Backup erstellen (shows JSON to copy — only if installed)
+  4. Einstellungen ändern (only if installed)
+  Backup format changed from base64 code to readable JSON.
+
+---
+
 ## v0.6.0 - 2026-04-20
 ### Added
 - Episode titles displayed as `S{s}E{e} – Title` everywhere (media player
