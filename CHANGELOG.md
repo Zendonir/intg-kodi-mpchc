@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.8.0 - 2026-04-20
+### Fixed
+- **Setup flow loop**: Step-2 form fields (`bridge_host`, `backup_json`,
+  `_backup_done`) are now checked *before* the `action` dropdown so the remote
+  can never accidentally re-route a completed form back to the action menu.
+- **Intermediate setup page removed**: Cleared `setup_data_schema.settings` in
+  `driver.json` so the UC Remote skips its built-in pre-step and shows the
+  4-option action menu as the very first page.
+
+---
+
 ## v0.7.0 - 2026-04-20
 ### Added
 - **Browse highlight**: Episode list is now rotated so the currently playing

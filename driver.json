@@ -1,6 +1,6 @@
 {
   "driver_id": "kodi-mpchc-bridge",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "min_core_api": "0.20.0",
   "name": {
     "en": "Kodi / MPC-HC Bridge"
@@ -18,21 +18,7 @@
     "title": {
       "en": "Integration setup"
     },
-    "settings": [
-      {
-        "id": "info",
-        "label": {
-          "en": "Setup"
-        },
-        "field": {
-          "label": {
-            "value": {
-              "en": "Enter the host and port of the kodi-mpchc-bridge hub running on your PC."
-            }
-          }
-        }
-      }
-    ]
+    "settings": []
   },
   "release_date": "2026-04-20"
 }
