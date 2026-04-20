@@ -41,6 +41,7 @@ _UUID_NS = uuid.NAMESPACE_URL
 # Backup / Restore helpers
 # ---------------------------------------------------------------------------
 
+
 def _encode_backup(host: str, port: int, name: str) -> str:
     """Encode connection settings as a compact base64 string."""
     data = {"h": host, "p": port, "n": name}
@@ -65,6 +66,7 @@ def _decode_backup(code: str) -> dict | None:
 # ---------------------------------------------------------------------------
 # Initial setup
 # ---------------------------------------------------------------------------
+
 
 async def driver_setup_handler(msg: ucapi.SetupDriver, api: IntegrationAPI) -> ucapi.SetupAction:
     """Handle setup flow steps."""
