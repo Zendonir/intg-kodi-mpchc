@@ -54,6 +54,10 @@ _FEATURES = [
     Features.CONTEXT_MENU,
     Features.INFO,
     Features.SETTINGS,
+    # Color function buttons → system/player-switch commands
+    Features.COLOR_BUTTONS,
+    # Channel up/down → relative seek (Springe)
+    Features.CHANNEL_SWITCHER,
     # Media browser (UC Remote >= 2.9.1)
     Features.BROWSE_MEDIA,
     Features.PLAY_MEDIA,
@@ -122,6 +126,18 @@ class BridgeMediaPlayer(MediaPlayer):
             ep = episodes[old_idx]
             ep["playcount"] = max(ep.get("playcount", 0), 1)
             _LOG.debug("optimistic watched mark: episode index %d", old_idx)
+
+    async def _seek_relative(self, client: Any, cmd_id: str, params: dict) -> bool:
+        """CHANNEL_UP/DOWN → relative seek ("Springe").
+
+        Optional param ``seconds`` (or ``value``) sets the jump amount.
+        Defaults: +30 s forward, +10 s backward.
+        """
+        default = 30 if cmd_id == Commands.CHANNEL_UP else 10
+        delta = abs(float(params.get("seconds", params.get("value", default))))
+        direction = 1 if cmd_id == Commands.CHANNEL_UP else -1
+        new_pos = max(0.0, float(self._state.get("position", 0)) + direction * delta)
+        return await client.send_command("seek", new_pos)
 
     def _ep_display_title(self, ep: dict[str, Any], season: int, idx: int) -> str:
         """Format browse/select label: ``S{s}E{e} – Title`` or fallbacks."""
@@ -207,14 +223,14 @@ class BridgeMediaPlayer(MediaPlayer):
         tv_show = self._state.get("tv_show", "")
         season = self._state.get("season", 0)
         playlist_index = self._state.get("playlist_index", -1)
+        # Use current artwork as fallback thumbnail for every episode without its own image.
         current_artwork = self._state.get("artwork_url", "") or None
 
         ep_items: list[BrowseMediaItem] = []
         for i, ep in enumerate(episodes):
             is_current = i == playlist_index
-            thumbnail = (
-                ep.get("thumbnail") or ep.get("art", {}).get("thumb") or (current_artwork if is_current else None)
-            )
+            # Per-episode image from bridge; fall back to season/current artwork for all episodes.
+            thumbnail = ep.get("thumbnail") or ep.get("art", {}).get("thumb") or current_artwork
             ep_items.append(
                 BrowseMediaItem(
                     media_id=str(ep.get("episodeid", i)),
@@ -228,6 +244,12 @@ class BridgeMediaPlayer(MediaPlayer):
                     duration=ep.get("runtime"),
                 )
             )
+
+        # Rotate the list so the currently playing episode is first.  The UC
+        # Remote always focuses the first item when the browser opens, so this
+        # ensures the highlight lands on the active episode automatically.
+        if 0 <= playlist_index < len(ep_items):
+            ep_items = ep_items[playlist_index:] + ep_items[:playlist_index]
 
         season_label = f"S{season:02d} \u2013 {tv_show}" if tv_show else f"Season {season}"
         container = BrowseMediaItem(
@@ -281,6 +303,11 @@ class BridgeMediaPlayer(MediaPlayer):
             Commands.CONTEXT_MENU: ("context_menu", None),
             Commands.INFO: ("show_info", None),
             Commands.SETTINGS: ("navigate_home", None),
+            # System / player-switch commands on color function buttons
+            Commands.FUNCTION_GREEN: ("switch_to_kodi", None),
+            Commands.FUNCTION_BLUE: ("switch_to_desktop", None),
+            Commands.FUNCTION_YELLOW: ("restart_kodi", None),
+            Commands.FUNCTION_RED: ("restart_pc", None),
         }
 
         if cmd_id in cmd_map:
@@ -298,6 +325,9 @@ class BridgeMediaPlayer(MediaPlayer):
         if cmd_id == Commands.REPEAT:
             mode = p.get("repeat", "off")
             return await c.send_command("repeat", mode)
+
+        if cmd_id in (Commands.CHANNEL_UP, Commands.CHANNEL_DOWN):
+            return await self._seek_relative(c, cmd_id, p)
 
         if cmd_id == Commands.PLAY_MEDIA:
             media_id = str(p.get("media_id", ""))
