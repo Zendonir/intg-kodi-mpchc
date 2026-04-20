@@ -108,6 +108,9 @@ class BridgeMediaPlayer(MediaPlayer):
         """
         Merge *patch* into internal state and return ucapi attribute updates.
         """
+        # Snapshot old playlist index before merging so we can detect advances.
+        old_playlist_index = self._state.get("playlist_index", -1)
+
         self._state.update(patch)
         attrs: dict[str, Any] = {}
 
@@ -123,8 +126,18 @@ class BridgeMediaPlayer(MediaPlayer):
             attrs[Attributes.MEDIA_POSITION] = int(patch["position"])
         if "duration" in patch:
             attrs[Attributes.MEDIA_DURATION] = int(patch["duration"])
-        if "title" in patch:
-            attrs[Attributes.MEDIA_TITLE] = patch["title"]
+
+        # Build display title: episodes use "S{s}E{e} – Title"; everything else raw.
+        if "title" in patch or "season" in patch or "episode" in patch or "media_type" in patch:
+            raw_title = self._state.get("title", "")
+            media_type = self._state.get("media_type", "")
+            season = self._state.get("season", 0)
+            ep_num = self._state.get("episode", 0)
+            if media_type == "episode" and raw_title and season > 0 and ep_num > 0:
+                attrs[Attributes.MEDIA_TITLE] = f"S{season:02d}E{ep_num:02d} \u2013 {raw_title}"
+            else:
+                attrs[Attributes.MEDIA_TITLE] = raw_title
+
         if "artist" in patch:
             attrs[Attributes.MEDIA_ARTIST] = patch["artist"]
         if "album" in patch:
@@ -149,6 +162,18 @@ class BridgeMediaPlayer(MediaPlayer):
             if 0 <= cur_idx < len(tracks):
                 attrs[Attributes.SOURCE] = tracks[cur_idx].get("label", "")
 
+        # When the playlist advances forward, optimistically mark the completed
+        # episode as watched so the browser reflects it immediately (before the
+        # next Kodi state push arrives with the confirmed playcount).
+        if "playlist_index" in patch:
+            new_idx = patch["playlist_index"]
+            if new_idx > old_playlist_index >= 0:
+                episodes: list[dict[str, Any]] = self._state.get("season_episodes", [])
+                if 0 <= old_playlist_index < len(episodes):
+                    ep = episodes[old_playlist_index]
+                    ep["playcount"] = max(ep.get("playcount", 0), 1)
+                    _LOG.debug("optimistic watched mark: episode index %d", old_playlist_index)
+
         return attrs
 
     # ------------------------------------------------------------------
@@ -167,33 +192,57 @@ class BridgeMediaPlayer(MediaPlayer):
 
         tv_show = self._state.get("tv_show", "")
         season = self._state.get("season", 0)
+        playlist_index = self._state.get("playlist_index", -1)
+        # Use current artwork as fallback thumbnail for the playing episode.
+        current_artwork = self._state.get("artwork_url", "") or None
 
-        # Build one BrowseMediaItem per episode
         ep_items: list[BrowseMediaItem] = []
         for i, ep in enumerate(episodes):
             watched = ep.get("playcount", 0) > 0
             resume = ep.get("resume_pos", 0.0)
-            if resume and resume > 60:
+            is_current = i == playlist_index
+
+            if is_current:
+                subtitle = "\u25b6 Now Playing"
+            elif resume and resume > 60:
                 subtitle = f"{'✓ ' if watched else ''}Resume: {int(resume // 60)}m {int(resume % 60):02d}s"
             elif watched:
                 subtitle = "✓ Watched"
             else:
                 subtitle = None
 
+            # Prefer S{s}E{e} – Title; fall back to E{e} – Title.
+            ep_num = ep.get("episode", i + 1)
+            ep_title = ep.get("title", "")
+            if season > 0 and ep_num > 0 and ep_title:
+                display_title = f"S{season:02d}E{ep_num:02d} \u2013 {ep_title}"
+            elif ep_title:
+                display_title = f"E{ep_num:02d} \u2013 {ep_title}"
+            else:
+                display_title = f"Episode {ep_num}"
+
+            # Per-episode thumbnail from bridge, fallback to current artwork when playing.
+            thumbnail = (
+                ep.get("thumbnail")
+                or ep.get("art", {}).get("thumb")
+                or (current_artwork if is_current else None)
+            )
+
             ep_items.append(
                 BrowseMediaItem(
                     media_id=str(ep.get("episodeid", i)),
-                    title=f"E{ep.get('episode', i + 1):02d} — {ep.get('title', '')}",
+                    title=display_title,
                     subtitle=subtitle,
                     media_class=MediaClass.EPISODE,
                     media_type=MediaContentType.TV_SHOW,
                     can_browse=False,
                     can_play=True,
+                    thumbnail=thumbnail,
                     duration=ep.get("runtime"),
                 )
             )
 
-        season_label = f"S{season:02d} — {tv_show}" if tv_show else f"Season {season}"
+        season_label = f"S{season:02d} \u2013 {tv_show}" if tv_show else f"Season {season}"
         container = BrowseMediaItem(
             media_id="season",
             title=season_label,
@@ -201,6 +250,7 @@ class BridgeMediaPlayer(MediaPlayer):
             media_type=MediaContentType.TV_SHOW,
             can_browse=True,
             can_play=False,
+            thumbnail=current_artwork,
             items=ep_items,
         )
 

@@ -52,6 +52,7 @@ class BridgeEpisodeSelect(Select):
         self._client = client
         self._episodes: list[dict[str, Any]] = []
         self._playlist_index: int = -1
+        self._season: int = 0
 
         super().__init__(
             f"select.{device_id}.episode",
@@ -68,11 +69,13 @@ class BridgeEpisodeSelect(Select):
     # Internal helpers
     # ------------------------------------------------------------------
     def _episode_label(self, ep: dict[str, Any]) -> str:
-        """Format ``E01 - Title`` from an episode dict."""
+        """Format ``S01E01 – Title`` (or ``E01 – Title`` when season unknown)."""
         num = ep.get("episode", 0)
         title = ep.get("title", "").strip()
         if title:
-            return f"E{num:02d} - {title}"
+            if self._season > 0:
+                return f"S{self._season:02d}E{num:02d} \u2013 {title}"
+            return f"E{num:02d} \u2013 {title}"
         return f"Episode {num}"
 
     def _label_at(self, idx: int) -> str:
@@ -133,9 +136,11 @@ class BridgeEpisodeSelect(Select):
     # ------------------------------------------------------------------
     def apply_state(self, patch: dict[str, Any]) -> dict[str, Any]:
         """Return attribute updates when the episode list or current index changes."""
-        if "season_episodes" not in patch and "playlist_index" not in patch:
+        if "season_episodes" not in patch and "playlist_index" not in patch and "season" not in patch:
             return {}
 
+        if "season" in patch:
+            self._season = patch["season"] or 0
         if "season_episodes" in patch:
             self._episodes = patch["season_episodes"] or []
         if "playlist_index" in patch:
