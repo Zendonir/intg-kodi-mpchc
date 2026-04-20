@@ -102,12 +102,53 @@ class BridgeMediaPlayer(MediaPlayer):
         )
 
     # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+    def _format_media_title(self) -> str:
+        """Return episode title as ``S{s}E{e} – Title``; raw title for all other types."""
+        raw = self._state.get("title", "")
+        season = self._state.get("season", 0)
+        ep_num = self._state.get("episode", 0)
+        if self._state.get("media_type") == "episode" and raw and season > 0 and ep_num > 0:
+            return f"S{season:02d}E{ep_num:02d} \u2013 {raw}"
+        return raw
+
+    def _mark_watched_if_advanced(self, old_idx: int, new_idx: int) -> None:
+        """Optimistically set playcount=1 for the episode that just finished."""
+        if new_idx <= old_idx or old_idx < 0:
+            return
+        episodes: list[dict[str, Any]] = self._state.get("season_episodes", [])
+        if 0 <= old_idx < len(episodes):
+            ep = episodes[old_idx]
+            ep["playcount"] = max(ep.get("playcount", 0), 1)
+            _LOG.debug("optimistic watched mark: episode index %d", old_idx)
+
+    def _ep_display_title(self, ep: dict[str, Any], season: int, idx: int) -> str:
+        """Format browse/select label: ``S{s}E{e} – Title`` or fallbacks."""
+        ep_num = ep.get("episode", idx + 1)
+        ep_title = ep.get("title", "")
+        if season > 0 and ep_num > 0 and ep_title:
+            return f"S{season:02d}E{ep_num:02d} \u2013 {ep_title}"
+        if ep_title:
+            return f"E{ep_num:02d} \u2013 {ep_title}"
+        return f"Episode {ep_num}"
+
+    def _ep_subtitle(self, ep: dict[str, Any], is_current: bool) -> str | None:
+        """Return the status subtitle for a browser episode item."""
+        if is_current:
+            return "\u25b6 Now Playing"
+        resume = ep.get("resume_pos", 0.0)
+        watched = ep.get("playcount", 0) > 0
+        if resume and resume > 60:
+            return f"{'✓ ' if watched else ''}Resume: {int(resume // 60)}m {int(resume % 60):02d}s"
+        return "✓ Watched" if watched else None
+
+    # ------------------------------------------------------------------
     # State updates from bridge
     # ------------------------------------------------------------------
     def apply_state(self, patch: dict[str, Any]) -> dict[str, Any]:
-        """
-        Merge *patch* into internal state and return ucapi attribute updates.
-        """
+        """Merge *patch* into internal state and return ucapi attribute updates."""
+        old_idx = self._state.get("playlist_index", -1)
         self._state.update(patch)
         attrs: dict[str, Any] = {}
 
@@ -123,8 +164,8 @@ class BridgeMediaPlayer(MediaPlayer):
             attrs[Attributes.MEDIA_POSITION] = int(patch["position"])
         if "duration" in patch:
             attrs[Attributes.MEDIA_DURATION] = int(patch["duration"])
-        if "title" in patch:
-            attrs[Attributes.MEDIA_TITLE] = patch["title"]
+        if "title" in patch or "season" in patch or "episode" in patch or "media_type" in patch:
+            attrs[Attributes.MEDIA_TITLE] = self._format_media_title()
         if "artist" in patch:
             attrs[Attributes.MEDIA_ARTIST] = patch["artist"]
         if "album" in patch:
@@ -149,6 +190,9 @@ class BridgeMediaPlayer(MediaPlayer):
             if 0 <= cur_idx < len(tracks):
                 attrs[Attributes.SOURCE] = tracks[cur_idx].get("label", "")
 
+        if "playlist_index" in patch:
+            self._mark_watched_if_advanced(old_idx, patch["playlist_index"])
+
         return attrs
 
     # ------------------------------------------------------------------
@@ -157,43 +201,37 @@ class BridgeMediaPlayer(MediaPlayer):
     async def browse(self, options: BrowseOptions) -> BrowseResults | StatusCodes:
         """Return the current season's episode list for the media browser widget."""
         episodes: list[dict[str, Any]] = self._state.get("season_episodes", [])
-
         if not episodes:
-            # Nothing to browse right now (movie, music, or idle)
-            return BrowseResults(
-                media=None,
-                pagination=Pagination(page=1, limit=0, count=0),
-            )
+            return BrowseResults(media=None, pagination=Pagination(page=1, limit=0, count=0))
 
         tv_show = self._state.get("tv_show", "")
         season = self._state.get("season", 0)
+        playlist_index = self._state.get("playlist_index", -1)
+        current_artwork = self._state.get("artwork_url", "") or None
 
-        # Build one BrowseMediaItem per episode
         ep_items: list[BrowseMediaItem] = []
         for i, ep in enumerate(episodes):
-            watched = ep.get("playcount", 0) > 0
-            resume = ep.get("resume_pos", 0.0)
-            if resume and resume > 60:
-                subtitle = f"{'✓ ' if watched else ''}Resume: {int(resume // 60)}m {int(resume % 60):02d}s"
-            elif watched:
-                subtitle = "✓ Watched"
-            else:
-                subtitle = None
-
+            is_current = i == playlist_index
+            thumbnail = (
+                ep.get("thumbnail")
+                or ep.get("art", {}).get("thumb")
+                or (current_artwork if is_current else None)
+            )
             ep_items.append(
                 BrowseMediaItem(
                     media_id=str(ep.get("episodeid", i)),
-                    title=f"E{ep.get('episode', i + 1):02d} — {ep.get('title', '')}",
-                    subtitle=subtitle,
+                    title=self._ep_display_title(ep, season, i),
+                    subtitle=self._ep_subtitle(ep, is_current),
                     media_class=MediaClass.EPISODE,
                     media_type=MediaContentType.TV_SHOW,
                     can_browse=False,
                     can_play=True,
+                    thumbnail=thumbnail,
                     duration=ep.get("runtime"),
                 )
             )
 
-        season_label = f"S{season:02d} — {tv_show}" if tv_show else f"Season {season}"
+        season_label = f"S{season:02d} \u2013 {tv_show}" if tv_show else f"Season {season}"
         container = BrowseMediaItem(
             media_id="season",
             title=season_label,
@@ -201,9 +239,9 @@ class BridgeMediaPlayer(MediaPlayer):
             media_type=MediaContentType.TV_SHOW,
             can_browse=True,
             can_play=False,
+            thumbnail=current_artwork,
             items=ep_items,
         )
-
         return BrowseResults(
             media=container,
             pagination=Pagination(page=1, limit=len(ep_items), count=len(ep_items)),
