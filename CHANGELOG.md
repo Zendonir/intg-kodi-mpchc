@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.8.1 - 2026-04-20
+### Fixed
+- **Build CI**: Added `workflow_dispatch` trigger to `build.yml` so the
+  aarch64 tar.gz release can be re-triggered manually via GitHub Actions UI
+  without needing to push a new tag. Supports optional `tag` input to
+  build and publish any existing tag.
+
+---
+
 ## v0.8.0 - 2026-04-20
 ### Fixed
 - **Setup flow loop**: Step-2 form fields (`bridge_host`, `backup_json`,
