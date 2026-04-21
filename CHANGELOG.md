@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.10.0 - 2026-04-21
+### Added
+- **Pre-configured remote** ("Externe Fernbedienungen") — a ready-made
+  `Remote` entity with three pages and full physical button mapping:
+  - **Wiedergabe**: Stop, Play/Pause, Skip ±, Prev/Next, Vol ±, Mute
+  - **Navigation**: D-Pad, OK, Back, Home, Info, Menü
+  - **System**: Zu Kodi wechseln, Zu Windows wechseln, Kodi neu starten
+
+---
+
 ## v0.9.2 - 2026-04-21
 ### Added
 - Specific navigation commands as simple commands on the media player —
