@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.9.2 - 2026-04-21
+### Added
+- Specific navigation commands as simple commands on the media player —
+  appear by name in the UC Remote command picker and can be assigned to
+  any button freely:
+  - Nächste / Vorherige Tonspur
+  - Nächster / Vorheriger Untertitel · Untertitel aus
+  - Nächstes / Vorheriges Kapitel
+  - Nächste / Vorherige Folge
+
+---
+
 ## v0.9.1 - 2026-04-21
 ### Changed
 - Entity names now bilingual (de/en): Audiospur, Untertitel, Kapitel.
