@@ -21,6 +21,7 @@ import config
 from bridge_client import BridgeClient
 from config import DeviceConfig, Devices
 from media_player import BridgeMediaPlayer
+from remote_entity import BridgeRemote
 from selects import BridgeEpisodeSelect, BridgeSelect
 from sensors import SENSOR_DEFS, BridgeSensor
 from setup_flow import driver_setup_handler
@@ -39,6 +40,8 @@ api = IntegrationAPI(_LOOP)
 _clients: dict[str, BridgeClient] = {}
 # device_id → BridgeMediaPlayer
 _players: dict[str, BridgeMediaPlayer] = {}
+# device_id → BridgeRemote
+_remotes: dict[str, BridgeRemote] = {}
 # device_id → list of BridgeSensor
 _sensors: dict[str, list[BridgeSensor]] = {}
 # device_id → list of BridgeSelect (audio / subtitle / chapter)
@@ -46,17 +49,41 @@ _selects: dict[str, list[BridgeSelect]] = {}
 # device_id → BridgeEpisodeSelect
 _episode_selects: dict[str, BridgeEpisodeSelect] = {}
 
-# Select entity definitions: (select_type, English name)
+# Select entity definitions: (select_type, {en, de} name)
 _SELECT_DEFS = [
-    ("audio", "Audio Track"),
-    ("subtitle", "Subtitle"),
-    ("chapter", "Chapter"),
+    ("audio", {"en": "Audio Track", "de": "Audiospur"}),
+    ("subtitle", {"en": "Subtitle", "de": "Untertitel"}),
+    ("chapter", {"en": "Chapter", "de": "Kapitel"}),
 ]
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def _add_secondary_entities(cfg: DeviceConfig, client: BridgeClient) -> None:
+    """Register sensors, selects, and episode-select for *cfg*."""
+    sensors: list[BridgeSensor] = []
+    for state_key, name, device_class, unit, decimals in SENSOR_DEFS:
+        sensor = BridgeSensor(cfg.id, state_key, name, device_class, unit, decimals)
+        sensor.device_id = cfg.id
+        api.available_entities.add(sensor)
+        sensors.append(sensor)
+    _sensors[cfg.id] = sensors
+
+    selects: list[BridgeSelect] = []
+    for sel_type, sel_name in _SELECT_DEFS:
+        sel = BridgeSelect(cfg.id, sel_type, sel_name, client)
+        sel.device_id = cfg.id
+        api.available_entities.add(sel)
+        selects.append(sel)
+    _selects[cfg.id] = selects
+
+    ep_sel = BridgeEpisodeSelect(cfg.id, client)
+    ep_sel.device_id = cfg.id
+    api.available_entities.add(ep_sel)
+    _episode_selects[cfg.id] = ep_sel
+
+
 def _add_device(cfg: DeviceConfig) -> None:
     """Create client + entities for a newly configured device."""
     if cfg.id in _clients:
@@ -76,36 +103,19 @@ def _add_device(cfg: DeviceConfig) -> None:
     _players[cfg.id] = player
     api.available_entities.add(player)
 
-    # Sensor entities (one per bridge state field)
-    sensors: list[BridgeSensor] = []
-    for state_key, name, device_class, unit, decimals in SENSOR_DEFS:
-        sensor = BridgeSensor(cfg.id, state_key, name, device_class, unit, decimals)
-        sensor.device_id = cfg.id
-        api.available_entities.add(sensor)
-        sensors.append(sensor)
-    _sensors[cfg.id] = sensors
+    # Pre-configured remote ("Externe Fernbedienungen")
+    remote = BridgeRemote(cfg, client)
+    remote.device_id = cfg.id
+    _remotes[cfg.id] = remote
+    api.available_entities.add(remote)
 
-    # Select entities (audio track, subtitle, chapter)
-    selects: list[BridgeSelect] = []
-    for sel_type, sel_name in _SELECT_DEFS:
-        sel = BridgeSelect(cfg.id, sel_type, sel_name, client)
-        sel.device_id = cfg.id
-        api.available_entities.add(sel)
-        selects.append(sel)
-    _selects[cfg.id] = selects
-
-    # Episode select (Kodi TV season navigation)
-    ep_sel = BridgeEpisodeSelect(cfg.id, client)
-    ep_sel.device_id = cfg.id
-    api.available_entities.add(ep_sel)
-    _episode_selects[cfg.id] = ep_sel
+    _add_secondary_entities(cfg, client)
 
     _LOG.info(
-        "Device added: %s (%s:%d) — %d entities registered",
+        "Device added: %s (%s:%d)",
         cfg.name,
         cfg.bridge_host,
         cfg.bridge_port,
-        1 + len(sensors) + len(selects) + 1,  # +1 for episode select
     )
 
 
@@ -118,6 +128,9 @@ def _remove_device(cfg: DeviceConfig | None) -> None:
     player = _players.pop(cfg.id, None)
     if player:
         api.available_entities.remove(player.id)
+    remote = _remotes.pop(cfg.id, None)
+    if remote:
+        api.available_entities.remove(remote.id)
     for sensor in _sensors.pop(cfg.id, []):
         api.available_entities.remove(sensor.id)
     for sel in _selects.pop(cfg.id, []):

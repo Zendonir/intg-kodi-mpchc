@@ -18,6 +18,7 @@ from ucapi.media_player import (
     Features,
     MediaClass,
     MediaContentType,
+    Options,
     Pagination,
     States,
 )
@@ -54,8 +55,6 @@ _FEATURES = [
     Features.CONTEXT_MENU,
     Features.INFO,
     Features.SETTINGS,
-    # Color function buttons → system/player-switch commands
-    Features.COLOR_BUTTONS,
     # Channel up/down → relative seek (Springe)
     Features.CHANNEL_SWITCHER,
     # Media browser (UC Remote >= 2.9.1)
@@ -103,6 +102,27 @@ class BridgeMediaPlayer(MediaPlayer):
                 Attributes.REPEAT: "off",
             },
             device_class=DeviceClasses.TV,
+            options={
+                Options.SIMPLE_COMMANDS: [
+                    # System
+                    "Zu Windows wechseln",
+                    "Zu Kodi wechseln",
+                    "Kodi neu starten",
+                    # Tonspur
+                    "Nächste Tonspur",
+                    "Vorherige Tonspur",
+                    # Untertitel
+                    "Nächster Untertitel",
+                    "Vorheriger Untertitel",
+                    "Untertitel aus",
+                    # Kapitel
+                    "Nächstes Kapitel",
+                    "Vorheriges Kapitel",
+                    # Folge
+                    "Nächste Folge",
+                    "Vorherige Folge",
+                ]
+            },
         )
 
     # ------------------------------------------------------------------
@@ -158,6 +178,30 @@ class BridgeMediaPlayer(MediaPlayer):
         if resume and resume > 60:
             return f"{'✓ ' if watched else ''}Resume: {int(resume // 60)}m {int(resume % 60):02d}s"
         return "✓ Watched" if watched else None
+
+    async def _step_track(self, tracks_key: str, cur_key: str, bridge_cmd: str, direction: int) -> bool:
+        tracks = self._state.get(tracks_key, [])
+        if not tracks:
+            return False
+        cur = self._state.get(cur_key, 0)
+        nxt = (max(cur, 0) + direction) % len(tracks)
+        return await self._client.send_command(bridge_cmd, tracks[nxt].get("pos", nxt))
+
+    async def _step_chapter(self, direction: int) -> bool:
+        chapters = self._state.get("chapters", [])
+        if not chapters:
+            return False
+        cur = self._state.get("current_chapter", 0)
+        nxt = max(0, min(len(chapters) - 1, cur + direction))
+        return await self._client.send_command("seek", chapters[nxt].get("time_ms", 0) / 1000.0)
+
+    async def _step_episode(self, direction: int) -> bool:
+        episodes = self._state.get("season_episodes", [])
+        if not episodes:
+            return False
+        nxt = (self._state.get("playlist_index", 0) + direction) % len(episodes)
+        filepath = episodes[nxt].get("file", "")
+        return await self._client.play_episode(filepath) if filepath else False
 
     # ------------------------------------------------------------------
     # State updates from bridge
@@ -303,11 +347,10 @@ class BridgeMediaPlayer(MediaPlayer):
             Commands.CONTEXT_MENU: ("context_menu", None),
             Commands.INFO: ("show_info", None),
             Commands.SETTINGS: ("navigate_home", None),
-            # System / player-switch commands on color function buttons
-            Commands.FUNCTION_GREEN: ("switch_to_kodi", None),
-            Commands.FUNCTION_BLUE: ("switch_to_desktop", None),
-            Commands.FUNCTION_YELLOW: ("restart_kodi", None),
-            Commands.FUNCTION_RED: ("restart_pc", None),
+            # Custom simple commands (assigned freely to buttons on the remote)
+            "Zu Windows wechseln": ("switch_to_desktop", None),
+            "Zu Kodi wechseln": ("switch_to_kodi", None),
+            "Kodi neu starten": ("restart_kodi", None),
         }
 
         if cmd_id in cmd_map:
@@ -338,6 +381,25 @@ class BridgeMediaPlayer(MediaPlayer):
                         return await c.play_episode(filepath)
             _LOG.warning("PLAY_MEDIA: episode not found: %s", media_id)
             return False
+
+        if cmd_id == "Nächste Tonspur":
+            return await self._step_track("audio_tracks", "current_audio", "audio_track", +1)
+        if cmd_id == "Vorherige Tonspur":
+            return await self._step_track("audio_tracks", "current_audio", "audio_track", -1)
+        if cmd_id == "Nächster Untertitel":
+            return await self._step_track("subtitle_tracks", "current_subtitle", "subtitle_track", +1)
+        if cmd_id == "Vorheriger Untertitel":
+            return await self._step_track("subtitle_tracks", "current_subtitle", "subtitle_track", -1)
+        if cmd_id == "Untertitel aus":
+            return await c.send_command("subtitle_track", -1)
+        if cmd_id == "Nächstes Kapitel":
+            return await self._step_chapter(+1)
+        if cmd_id == "Vorheriges Kapitel":
+            return await self._step_chapter(-1)
+        if cmd_id == "Nächste Folge":
+            return await self._step_episode(+1)
+        if cmd_id == "Vorherige Folge":
+            return await self._step_episode(-1)
 
         _LOG.warning("Unhandled command: %s", cmd_id)
         return False

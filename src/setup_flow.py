@@ -161,9 +161,36 @@ def _step_action_menu() -> ucapi.RequestUserInput:
 async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -> ucapi.SetupAction:
     inp = msg.input_values or {}
 
-    action = inp.get("action")
+    # ── Step 2 → processing (check form fields BEFORE the action dropdown) ───
+    # These keys are only present when the user has submitted a step-2 form,
+    # never on the action-menu submission, so they must be checked first to
+    # avoid re-routing back to step 1 when the remote echoes prior field values.
+
+    # Backup display was acknowledged → nothing to save
+    if "_backup_done" in inp:
+        return ucapi.SetupComplete()
+
+    # Restore from JSON
+    if "backup_json" in inp:
+        restored = _decode_backup(inp.get("backup_json", ""))
+        if not restored:
+            _LOG.warning("Restore: invalid backup JSON")
+            return ucapi.SetupError(ucapi.IntegrationSetupError.OTHER)
+        return _save_device(restored["name"], restored["bridge_host"], restored["bridge_port"])
+
+    # Install / change settings: name + bridge_host + bridge_port present
+    if "bridge_host" in inp:
+        name = inp.get("name", "Kodi / MPC-HC").strip() or "Kodi / MPC-HC"
+        host = inp.get("bridge_host", DEFAULT_BRIDGE_HOST).strip() or DEFAULT_BRIDGE_HOST
+        try:
+            port = int(inp.get("bridge_port", str(DEFAULT_BRIDGE_PORT)).strip())
+        except ValueError:
+            port = DEFAULT_BRIDGE_PORT
+        return _save_device(name, host, port)
 
     # ── Step 1 → Step 2 routing ─────────────────────────────────────────────
+    action = inp.get("action")
+
     if action == "install":
         return ucapi.RequestUserInput(
             {"en": "Installation", "de": "Installation"},
@@ -222,33 +249,12 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
             _conn_fields_prefilled(cfg),
         )
 
-    # ── Step 2 → processing ─────────────────────────────────────────────────
+    _LOG.warning("Setup: unexpected input %s", list(inp.keys()))
+    return ucapi.SetupError()
 
     # Backup display was acknowledged → nothing to save
     if "_backup_done" in inp:
         return ucapi.SetupComplete()
-
-    # Restore from JSON
-    if "backup_json" in inp:
-        restored = _decode_backup(inp.get("backup_json", ""))
-        if not restored:
-            _LOG.warning("Restore: invalid backup JSON")
-            return ucapi.SetupError(ucapi.IntegrationSetupError.OTHER)
-        return _save_device(restored["name"], restored["bridge_host"], restored["bridge_port"])
-
-    # Install / change settings: name + bridge_host + bridge_port present
-    if "bridge_host" in inp or "name" in inp:
-        name = inp.get("name", "Kodi / MPC-HC").strip() or "Kodi / MPC-HC"
-        host = inp.get("bridge_host", DEFAULT_BRIDGE_HOST).strip() or DEFAULT_BRIDGE_HOST
-        try:
-            port = int(inp.get("bridge_port", str(DEFAULT_BRIDGE_PORT)).strip())
-        except ValueError:
-            port = DEFAULT_BRIDGE_PORT
-        return _save_device(name, host, port)
-
-    _LOG.warning("Setup: unexpected input %s", list(inp.keys()))
-    return ucapi.SetupError()
-
 
 def _save_device(name: str, host: str, port: int) -> ucapi.SetupAction:
     device_id = str(uuid.uuid5(_UUID_NS, f"{host}:{port}"))
