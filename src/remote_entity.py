@@ -12,7 +12,14 @@ from __future__ import annotations
 
 from ucapi import Remote, StatusCodes
 from ucapi.remote import Attributes, Features, States, create_send_cmd
-from ucapi.ui import Buttons, Size, UiPage, create_btn_mapping, create_ui_icon, create_ui_text
+from ucapi.ui import (
+    Buttons,
+    Size,
+    UiPage,
+    create_btn_mapping,
+    create_ui_icon,
+    create_ui_text,
+)
 
 from bridge_client import BridgeClient
 from config import DeviceConfig
