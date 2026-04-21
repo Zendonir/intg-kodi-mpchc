@@ -102,7 +102,7 @@ class BridgeMediaPlayer(MediaPlayer):
                 Attributes.REPEAT: "off",
             },
             device_class=DeviceClasses.TV,
-            options={Options.SIMPLE_COMMANDS: ["GOTO_WINDOWS", "GOTO_KODI", "RESTART_KODI"]},
+            options={Options.SIMPLE_COMMANDS: ["Zu Windows wechseln", "Zu Kodi wechseln", "Kodi neu starten"]},
         )
 
     # ------------------------------------------------------------------
@@ -298,9 +298,9 @@ class BridgeMediaPlayer(MediaPlayer):
             Commands.INFO: ("show_info", None),
             Commands.SETTINGS: ("navigate_home", None),
             # Custom simple commands (assigned freely to buttons on the remote)
-            "GOTO_WINDOWS": ("switch_to_desktop", None),
-            "GOTO_KODI": ("switch_to_kodi", None),
-            "RESTART_KODI": ("restart_kodi", None),
+            "Zu Windows wechseln": ("switch_to_desktop", None),
+            "Zu Kodi wechseln": ("switch_to_kodi", None),
+            "Kodi neu starten": ("restart_kodi", None),
         }
 
         if cmd_id in cmd_map:

@@ -56,7 +56,7 @@ class BridgeEpisodeSelect(Select):
 
         super().__init__(
             f"select.{device_id}.episode",
-            {"en": "Episode"},
+            {"en": "Episode", "de": "Episode"},
             {
                 Attributes.STATE: States.ON,
                 Attributes.CURRENT_OPTION: "",
@@ -166,7 +166,7 @@ class BridgeSelect(Select):
         self,
         device_id: str,
         select_type: str,
-        name: str,
+        name: str | dict[str, str],
         client: BridgeClient,
     ) -> None:
         assert select_type in _TYPE_MAP, f"Unknown select type: {select_type}"
@@ -180,7 +180,7 @@ class BridgeSelect(Select):
         # apply_state() once the bridge pushes state.
         super().__init__(
             f"select.{device_id}.{select_type}",
-            {"en": name},
+            {"en": name} if isinstance(name, str) else name,
             {
                 Attributes.STATE: States.ON,
                 Attributes.CURRENT_OPTION: "",

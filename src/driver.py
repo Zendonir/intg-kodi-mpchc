@@ -46,11 +46,11 @@ _selects: dict[str, list[BridgeSelect]] = {}
 # device_id → BridgeEpisodeSelect
 _episode_selects: dict[str, BridgeEpisodeSelect] = {}
 
-# Select entity definitions: (select_type, English name)
+# Select entity definitions: (select_type, {en, de} name)
 _SELECT_DEFS = [
-    ("audio", "Audio Track"),
-    ("subtitle", "Subtitle"),
-    ("chapter", "Chapter"),
+    ("audio", {"en": "Audio Track", "de": "Audiospur"}),
+    ("subtitle", {"en": "Subtitle", "de": "Untertitel"}),
+    ("chapter", {"en": "Chapter", "de": "Kapitel"}),
 ]
 
 

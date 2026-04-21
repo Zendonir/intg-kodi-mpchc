@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.9.1 - 2026-04-21
+### Changed
+- Entity names now bilingual (de/en): Audiospur, Untertitel, Kapitel.
+- Simple commands renamed to German:
+  `Zu Windows wechseln`, `Zu Kodi wechseln`, `Kodi neu starten`.
+
+---
+
 ## v0.9.0 - 2026-04-20
 ### Changed
 - **Episode list order restored**: Media browser now shows episodes in their
