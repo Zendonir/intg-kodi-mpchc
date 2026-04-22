@@ -203,26 +203,25 @@ async def _on_disconnect() -> None:
 
 @api.listens_to(ucapi.Events.ENTER_STANDBY)
 async def _on_standby() -> None:
-    for client in _clients.values():
-        await client.stop()
+    # Keep bridge connections alive — the hub runs on the PC regardless of
+    # the UC Remote's sleep state. Stopping here causes a visible
+    # "connection lost" symbol when the user wakes the remote.
+    _LOG.debug("UC Remote entering standby — bridge connections kept alive")
 
 
 @api.listens_to(ucapi.Events.EXIT_STANDBY)
 async def _on_exit_standby() -> None:
-    for device_id, _ in _clients.items():
-        cfg = config.devices.get(device_id) if config.devices else None
-        if not cfg:
-            continue
-        old = _clients.get(device_id)
-        if old:
-            await old.stop()
-        new_client = BridgeClient(
-            host=cfg.bridge_host,
-            port=cfg.bridge_port,
-            on_state=_make_state_handler(device_id),
-        )
-        _clients[device_id] = new_client
-        new_client.start()
+    for device_id, client in _clients.items():
+        if client.connected:
+            # Already connected: push fresh state so entities are up to date.
+            current = await client.fetch_state()
+            if current:
+                handler = _make_state_handler(device_id)
+                await handler(current, True)
+        elif not client.running:
+            # Client was stopped for some other reason — restart it.
+            client.start()
+        # else: reconnect loop is already running; state_full will arrive on reconnect.
 
 
 @api.listens_to(ucapi.Events.SUBSCRIBE_ENTITIES)

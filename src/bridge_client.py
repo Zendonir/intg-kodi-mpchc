@@ -47,10 +47,16 @@ class BridgeClient:
     def connected(self) -> bool:
         return self._connected
 
+    @property
+    def running(self) -> bool:
+        return self._running
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
     def start(self) -> None:
+        if self._running and self._task and not self._task.done():
+            return  # already running — do not create a second loop
         self._running = True
         self._task = asyncio.create_task(self._connect_loop(), name="bridge-ws")
 
