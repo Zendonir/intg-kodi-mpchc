@@ -252,9 +252,6 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
     _LOG.warning("Setup: unexpected input %s", list(inp.keys()))
     return ucapi.SetupError()
 
-    # Backup display was acknowledged → nothing to save
-    if "_backup_done" in inp:
-        return ucapi.SetupComplete()
 
 def _save_device(name: str, host: str, port: int) -> ucapi.SetupAction:
     device_id = str(uuid.uuid5(_UUID_NS, f"{host}:{port}"))
