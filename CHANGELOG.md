@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.1.1 - 2026-04-22
+### Fixed
+- Bridge WebSocket connection is now kept alive during UC Remote standby —
+  the "connection lost" symbol no longer appears after briefly switching to Windows
+- Removed unreachable code in setup flow (pylint W0101)
+
+---
+
 ## v0.1.0 - 2026-04-21
 ### Initial release
 - Media player entity with full play/pause/seek/volume/track control
