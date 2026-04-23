@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.1.2 - 2026-04-23
+### Fixed
+- Select entities (Audiospur, Untertitel, Kapitel, Folge) no longer show a
+  persistent red error symbol after Kodi was offline — STATE is now explicitly
+  set to UNAVAILABLE when no options are available and back to ON when data
+  arrives, clearing any prior error indicator
+- Kiosk commands (Zu Kodi wechseln / Zu Windows wechseln / Kodi neu starten)
+  now correctly call the bridge REST endpoints /api/kiosk/* instead of the
+  generic /api/command route where they were silently ignored
+- ON / OFF / TOGGLE media player commands mapped to valid bridge equivalents
+- Episode navigation (Nächste/Vorherige Folge) uses the bridge's
+  next_episode / prev_episode commands directly
+
+---
+
 ## v0.1.1 - 2026-04-22
 ### Fixed
 - Bridge WebSocket connection is now kept alive during UC Remote standby —

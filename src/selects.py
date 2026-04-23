@@ -154,6 +154,7 @@ class BridgeEpisodeSelect(Select):
             current = labels[0] if labels else ""
 
         return {
+            Attributes.STATE: States.ON if labels else States.UNAVAILABLE,
             Attributes.OPTIONS: labels,
             Attributes.CURRENT_OPTION: current,
         }
@@ -288,6 +289,7 @@ class BridgeSelect(Select):
                 current_label = labels[0] if labels else ""
 
         attrs: dict[str, Any] = {
+            Attributes.STATE: States.ON if options else States.UNAVAILABLE,
             Attributes.OPTIONS: options,
             Attributes.CURRENT_OPTION: current_label,
         }
