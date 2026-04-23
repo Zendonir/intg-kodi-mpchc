@@ -33,6 +33,7 @@ class BridgeClient:
 
     def __init__(self, host: str, port: int, on_state: StateCallback) -> None:
         _base = f"http://{host}:{port}"
+        self._base_url = _base
         self._ws_url = f"ws://{host}:{port}/api/ws"
         self._cmd_url = f"{_base}/api/command"
         self._state_url = f"{_base}/api/state"
@@ -76,8 +77,41 @@ class BridgeClient:
     # ------------------------------------------------------------------
     # Commands
     # ------------------------------------------------------------------
+
+    # Integration-side virtual command names that map to dedicated kiosk
+    # REST endpoints instead of the generic /api/command route.
+    _KIOSK_ROUTES: dict[str, str] = {
+        "switch_to_kodi": "/api/kiosk/kodi",
+        "switch_to_desktop": "/api/kiosk/windows",
+        "restart_kodi": "/api/kiosk/restart",
+        # ON / OFF map to focus Kodi / restore Windows
+        "launch": "/api/kiosk/kodi",
+        "quit": "/api/kiosk/windows",
+    }
+    # Commands that don't exist in the bridge but have a valid equivalent.
+    _CMD_REMAP: dict[str, str] = {
+        "toggle": "kodi_windows",
+    }
+
     async def send_command(self, cmd: str, value: object = None) -> bool:
         """POST a command to the bridge. Returns True on success."""
+        # Route kiosk-style virtual commands to their own REST endpoints.
+        kiosk_path = self._KIOSK_ROUTES.get(cmd)
+        if kiosk_path:
+            try:
+                session = await self._get_session()
+                async with session.post(
+                    f"{self._base_url}{kiosk_path}",
+                    timeout=aiohttp.ClientTimeout(total=5.0),
+                ) as resp:
+                    return resp.status == 200
+            except Exception as exc:
+                _LOG.debug("Kiosk command %s failed: %s", cmd, exc)
+                return False
+
+        # Remap commands that have been renamed in the bridge API.
+        cmd = self._CMD_REMAP.get(cmd, cmd)
+
         payload: dict[str, Any] = {"cmd": cmd}
         if value is not None:
             payload["value"] = value

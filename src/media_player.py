@@ -196,12 +196,8 @@ class BridgeMediaPlayer(MediaPlayer):
         return await self._client.send_command("seek", chapters[nxt].get("time_ms", 0) / 1000.0)
 
     async def _step_episode(self, direction: int) -> bool:
-        episodes = self._state.get("season_episodes", [])
-        if not episodes:
-            return False
-        nxt = (self._state.get("playlist_index", 0) + direction) % len(episodes)
-        filepath = episodes[nxt].get("file", "")
-        return await self._client.play_episode(filepath) if filepath else False
+        cmd = "next_episode" if direction > 0 else "prev_episode"
+        return await self._client.send_command(cmd)
 
     # ------------------------------------------------------------------
     # State updates from bridge
