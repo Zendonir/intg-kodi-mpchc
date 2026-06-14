@@ -149,6 +149,18 @@ def _add_device(cfg: DeviceConfig) -> None:
     )
 
 
+def _drop_entity(entity_id: str) -> None:
+    """Remove an entity from both the available and configured stores.
+
+    Dropping it from ``configured_entities`` too ensures a reconfigure (e.g.
+    changing or clearing the PC-Steuerung IP) does not leave a stale entity
+    instance behind that still holds the old client and would keep routing
+    commands to the previous device.
+    """
+    api.available_entities.remove(entity_id)
+    api.configured_entities.remove(entity_id)
+
+
 def _remove_device(cfg: DeviceConfig | None) -> None:
     if cfg is None:
         return
@@ -157,26 +169,26 @@ def _remove_device(cfg: DeviceConfig | None) -> None:
         asyncio.create_task(client.stop())
     player = _players.pop(cfg.id, None)
     if player:
-        api.available_entities.remove(player.id)
+        _drop_entity(player.id)
     remote = _remotes.pop(cfg.id, None)
     if remote:
-        api.available_entities.remove(remote.id)
+        _drop_entity(remote.id)
     for sensor in _sensors.pop(cfg.id, []):
-        api.available_entities.remove(sensor.id)
+        _drop_entity(sensor.id)
     for sel in _selects.pop(cfg.id, []):
-        api.available_entities.remove(sel.id)
+        _drop_entity(sel.id)
     ep_sel = _episode_selects.pop(cfg.id, None)
     if ep_sel:
-        api.available_entities.remove(ep_sel.id)
+        _drop_entity(ep_sel.id)
     htpc = _htpc_clients.pop(cfg.id, None)
     if htpc:
         asyncio.create_task(htpc.stop())
     htpc_remote = _htpc_remotes.pop(cfg.id, None)
     if htpc_remote:
-        api.available_entities.remove(htpc_remote.id)
+        _drop_entity(htpc_remote.id)
     htpc_sensor = _htpc_sensors.pop(cfg.id, None)
     if htpc_sensor:
-        api.available_entities.remove(htpc_sensor.id)
+        _drop_entity(htpc_sensor.id)
     _LOG.info("Device removed: %s", cfg.id)
 
 

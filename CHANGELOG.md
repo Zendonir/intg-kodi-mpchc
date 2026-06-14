@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the IP can be changed at any time afterwards
 - The PC power host/port are included in the JSON backup/restore payload
 
+### Fixed
+- Reconfiguring or removing a device now drops its entities from the
+  configured-entities store as well, so changing or clearing the PC-Steuerung
+  IP no longer leaves a stale entity routing commands to the previous device
+
 ---
 
 ## v0.1.2 - 2026-04-23
