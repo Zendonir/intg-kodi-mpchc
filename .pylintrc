@@ -20,7 +20,8 @@ disable=
     too-many-return-statements,
     unused-argument,
     arguments-differ,
-    unused-variable
+    unused-variable,
+    duplicate-code
 
 [STRING]
 

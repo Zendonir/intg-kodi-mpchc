@@ -19,6 +19,9 @@ class DeviceConfig:
     name: str
     bridge_host: str = field(default="localhost")
     bridge_port: int = field(default=13590)
+    # Optional HTPC WiFi power-control device. Empty host = feature disabled.
+    htpc_host: str = field(default="")
+    htpc_port: int = field(default=80)
 
     def __post_init__(self) -> None:
         for f in fields(self):

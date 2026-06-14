@@ -29,7 +29,12 @@ from ucapi import IntegrationAPI
 
 import config
 from config import DeviceConfig
-from const import DEFAULT_BRIDGE_HOST, DEFAULT_BRIDGE_PORT
+from const import (
+    DEFAULT_BRIDGE_HOST,
+    DEFAULT_BRIDGE_PORT,
+    DEFAULT_HTPC_HOST,
+    DEFAULT_HTPC_PORT,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -43,7 +48,14 @@ _UUID_NS = uuid.NAMESPACE_URL
 def _encode_backup(cfg: DeviceConfig) -> str:
     """Encode a DeviceConfig as a compact JSON backup string."""
     return json.dumps(
-        {"version": 1, "name": cfg.name, "bridge_host": cfg.bridge_host, "bridge_port": cfg.bridge_port},
+        {
+            "version": 1,
+            "name": cfg.name,
+            "bridge_host": cfg.bridge_host,
+            "bridge_port": cfg.bridge_port,
+            "htpc_host": cfg.htpc_host,
+            "htpc_port": cfg.htpc_port,
+        },
         indent=2,
     )
 
@@ -56,6 +68,8 @@ def _decode_backup(text: str) -> dict | None:
             "name": str(data.get("name", "")).strip() or "Kodi / MPC-HC",
             "bridge_host": str(data.get("bridge_host", "")).strip(),
             "bridge_port": int(data.get("bridge_port", DEFAULT_BRIDGE_PORT)),
+            "htpc_host": str(data.get("htpc_host", "")).strip(),
+            "htpc_port": int(data.get("htpc_port", DEFAULT_HTPC_PORT)),
         }
     except Exception:
         return None
@@ -73,6 +87,31 @@ def _first_device() -> DeviceConfig | None:
 # Re-usable form fragments
 # ---------------------------------------------------------------------------
 
+
+def _htpc_fields(host: str, port: int) -> list[dict]:
+    """Optional PC power-control fields (HTPC WiFi device)."""
+    return [
+        {
+            "id": "htpc_info",
+            "label": {
+                "en": "Optional: PC power control. Leave the IP empty to disable.",
+                "de": "Optional: PC-Steuerung. IP leer lassen zum Deaktivieren.",
+            },
+            "field": {"label": {"value": {"en": ""}}},
+        },
+        {
+            "id": "htpc_host",
+            "label": {"en": "PC power device IP (optional)", "de": "PC-Steuerung IP (optional)"},
+            "field": {"text": {"value": host}},
+        },
+        {
+            "id": "htpc_port",
+            "label": {"en": "PC power device port", "de": "PC-Steuerung Port"},
+            "field": {"text": {"value": str(port)}},
+        },
+    ]
+
+
 _CONN_FIELDS = [
     {
         "id": "name",
@@ -89,7 +128,7 @@ _CONN_FIELDS = [
         "label": {"en": "Bridge port", "de": "Bridge-Port"},
         "field": {"text": {"value": str(DEFAULT_BRIDGE_PORT)}},
     },
-]
+] + _htpc_fields(DEFAULT_HTPC_HOST, DEFAULT_HTPC_PORT)
 
 
 def _conn_fields_prefilled(cfg: DeviceConfig) -> list[dict]:
@@ -109,7 +148,7 @@ def _conn_fields_prefilled(cfg: DeviceConfig) -> list[dict]:
             "label": {"en": "Bridge port", "de": "Bridge-Port"},
             "field": {"text": {"value": str(cfg.bridge_port)}},
         },
-    ]
+    ] + _htpc_fields(cfg.htpc_host, cfg.htpc_port)
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +215,13 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
         if not restored:
             _LOG.warning("Restore: invalid backup JSON")
             return ucapi.SetupError(ucapi.IntegrationSetupError.OTHER)
-        return _save_device(restored["name"], restored["bridge_host"], restored["bridge_port"])
+        return _save_device(
+            restored["name"],
+            restored["bridge_host"],
+            restored["bridge_port"],
+            restored["htpc_host"],
+            restored["htpc_port"],
+        )
 
     # Install / change settings: name + bridge_host + bridge_port present
     if "bridge_host" in inp:
@@ -186,7 +231,8 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
             port = int(inp.get("bridge_port", str(DEFAULT_BRIDGE_PORT)).strip())
         except ValueError:
             port = DEFAULT_BRIDGE_PORT
-        return _save_device(name, host, port)
+        htpc_host, htpc_port = _parse_htpc(inp)
+        return _save_device(name, host, port, htpc_host, htpc_port)
 
     # ── Step 1 → Step 2 routing ─────────────────────────────────────────────
     action = inp.get("action")
@@ -253,12 +299,35 @@ async def _handle_user_data(msg: ucapi.UserDataResponse, _api: IntegrationAPI) -
     return ucapi.SetupError()
 
 
-def _save_device(name: str, host: str, port: int) -> ucapi.SetupAction:
+def _parse_htpc(inp: dict) -> tuple[str, int]:
+    """Extract the optional PC power-control host/port from a submitted form."""
+    htpc_host = inp.get("htpc_host", DEFAULT_HTPC_HOST).strip()
+    try:
+        htpc_port = int(inp.get("htpc_port", str(DEFAULT_HTPC_PORT)).strip())
+    except ValueError:
+        htpc_port = DEFAULT_HTPC_PORT
+    return htpc_host, htpc_port
+
+
+def _save_device(
+    name: str,
+    host: str,
+    port: int,
+    htpc_host: str = DEFAULT_HTPC_HOST,
+    htpc_port: int = DEFAULT_HTPC_PORT,
+) -> ucapi.SetupAction:
     device_id = str(uuid.uuid5(_UUID_NS, f"{host}:{port}"))
-    cfg = DeviceConfig(id=device_id, name=name, bridge_host=host, bridge_port=port)
+    cfg = DeviceConfig(
+        id=device_id,
+        name=name,
+        bridge_host=host,
+        bridge_port=port,
+        htpc_host=htpc_host,
+        htpc_port=htpc_port,
+    )
     if config.devices:
         config.devices.add_or_update(cfg)
-    _LOG.info("Device configured: %s @ %s:%d", name, host, port)
+    _LOG.info("Device configured: %s @ %s:%d (PC control: %s)", name, host, port, htpc_host or "off")
     return ucapi.SetupComplete()
 
 
@@ -275,6 +344,8 @@ async def reconfigure_handler(msg: ucapi.SetupDriver, _api: IntegrationAPI, devi
         current_host = cfg.bridge_host if cfg else DEFAULT_BRIDGE_HOST
         current_port = str(cfg.bridge_port) if cfg else str(DEFAULT_BRIDGE_PORT)
         current_name = cfg.name if cfg else "Kodi / MPC-HC"
+        htpc_host = cfg.htpc_host if cfg else DEFAULT_HTPC_HOST
+        htpc_port = cfg.htpc_port if cfg else DEFAULT_HTPC_PORT
         backup_text = _encode_backup(cfg) if cfg else ""
 
         return ucapi.RequestUserInput(
@@ -295,6 +366,7 @@ async def reconfigure_handler(msg: ucapi.SetupDriver, _api: IntegrationAPI, devi
                     "label": {"en": "Bridge port", "de": "Bridge-Port"},
                     "field": {"text": {"value": current_port}},
                 },
+                *_htpc_fields(htpc_host, htpc_port),
                 {
                     "id": "backup_info",
                     "label": {"en": "Backup JSON (copy and save)", "de": "Backup-JSON (kopieren und speichern)"},
@@ -311,8 +383,16 @@ async def reconfigure_handler(msg: ucapi.SetupDriver, _api: IntegrationAPI, devi
             port = int(inp.get("bridge_port", str(DEFAULT_BRIDGE_PORT)).strip())
         except ValueError:
             port = DEFAULT_BRIDGE_PORT
+        htpc_host, htpc_port = _parse_htpc(inp)
 
-        updated = DeviceConfig(id=device_id, name=name, bridge_host=host, bridge_port=port)
+        updated = DeviceConfig(
+            id=device_id,
+            name=name,
+            bridge_host=host,
+            bridge_port=port,
+            htpc_host=htpc_host,
+            htpc_port=htpc_port,
+        )
         if config.devices:
             config.devices.add_or_update(updated)
         return ucapi.SetupComplete()

@@ -34,6 +34,20 @@ The [kodi-mpchc-bridge](https://github.com/Zendonir/kodi-mpchc-bridge) hub runs 
 - **Kapitel** — jump to chapter
 - **Episode** — navigate directly to any episode in the current season
 
+### Optional PC power control (HTPC WiFi Control / Streacom)
+If you run the [HTPC-WiFi-Control-Streacom](https://github.com/Zendonir/HTPC-WiFi-Control-Streacom)
+device, the integration can power the PC on/off, reset it and report its power state.
+
+- **PC remote entity** — power on / off / toggle, reset and force-off, with a
+  `POWER` button mapping and a UI page (PC einschalten / ausschalten /
+  zurücksetzen / hart ausschalten). The remote's ON/OFF state mirrors the live PC power state.
+- **PC-Status sensor** — binary sensor showing whether the PC is on or off.
+
+This feature is **optional**: leave the *PC-Steuerung IP* empty during setup to
+disable it. The IP can be changed at any time later via **Einstellungen ändern**
+or the device reconfigure dialog. The device is reached over its REST API
+(default port `80`).
+
 ### Pre-configured Remote ("Externe Fernbedienungen")
 Ready-made remote with three pages and full physical button mapping:
 
