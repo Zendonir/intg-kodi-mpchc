@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v0.1.3 - 2026-06-14
+### Added
+- Optional PC power control via the HTPC WiFi Control (Streacom) device:
+  - **PC remote entity** with power on / off / toggle, reset and force-off,
+    plus a `POWER` button mapping and a UI page with the four power actions
+  - The remote's state reflects the live PC power state (ON / OFF)
+  - **PC-Status binary sensor** that surfaces the power state explicitly
+  - The device state is polled over its REST API (`/state`) and pushed to the
+    entities; commands trigger an immediate state refresh
+- Setup, settings-change and reconfigure flows gained optional
+  **PC-Steuerung IP / Port** fields — leave the IP empty to disable the feature;
+  the IP can be changed at any time afterwards
+- The PC power host/port are included in the JSON backup/restore payload
+
+---
+
 ## v0.1.2 - 2026-04-23
 ### Fixed
 - Select entities (Audiospur, Untertitel, Kapitel, Folge) no longer show a

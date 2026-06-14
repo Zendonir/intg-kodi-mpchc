@@ -20,6 +20,8 @@ from ucapi import IntegrationAPI
 import config
 from bridge_client import BridgeClient
 from config import DeviceConfig, Devices
+from htpc import HtpcRemote, HtpcSensor
+from htpc_client import HtpcClient
 from media_player import BridgeMediaPlayer
 from remote_entity import BridgeRemote
 from selects import BridgeEpisodeSelect, BridgeSelect
@@ -48,6 +50,12 @@ _sensors: dict[str, list[BridgeSensor]] = {}
 _selects: dict[str, list[BridgeSelect]] = {}
 # device_id → BridgeEpisodeSelect
 _episode_selects: dict[str, BridgeEpisodeSelect] = {}
+# device_id → HtpcClient (optional PC power control)
+_htpc_clients: dict[str, HtpcClient] = {}
+# device_id → HtpcRemote
+_htpc_remotes: dict[str, HtpcRemote] = {}
+# device_id → HtpcSensor
+_htpc_sensors: dict[str, HtpcSensor] = {}
 
 # Select entity definitions: (select_type, {en, de} name)
 _SELECT_DEFS = [
@@ -84,6 +92,27 @@ def _add_secondary_entities(cfg: DeviceConfig, client: BridgeClient) -> None:
     _episode_selects[cfg.id] = ep_sel
 
 
+def _add_htpc_entities(cfg: DeviceConfig) -> None:
+    """Register the optional PC power-control entities for *cfg*."""
+    if not cfg.htpc_host:
+        return
+
+    htpc = HtpcClient(cfg.htpc_host, cfg.htpc_port, on_power=_make_power_handler(cfg.id))
+    _htpc_clients[cfg.id] = htpc
+
+    remote = HtpcRemote(cfg, htpc)
+    remote.device_id = cfg.id
+    _htpc_remotes[cfg.id] = remote
+    api.available_entities.add(remote)
+
+    sensor = HtpcSensor(cfg)
+    sensor.device_id = cfg.id
+    _htpc_sensors[cfg.id] = sensor
+    api.available_entities.add(sensor)
+
+    _LOG.info("PC power control enabled: %s (%s:%d)", cfg.name, cfg.htpc_host, cfg.htpc_port)
+
+
 def _add_device(cfg: DeviceConfig) -> None:
     """Create client + entities for a newly configured device."""
     if cfg.id in _clients:
@@ -110,6 +139,7 @@ def _add_device(cfg: DeviceConfig) -> None:
     api.available_entities.add(remote)
 
     _add_secondary_entities(cfg, client)
+    _add_htpc_entities(cfg)
 
     _LOG.info(
         "Device added: %s (%s:%d)",
@@ -138,6 +168,15 @@ def _remove_device(cfg: DeviceConfig | None) -> None:
     ep_sel = _episode_selects.pop(cfg.id, None)
     if ep_sel:
         api.available_entities.remove(ep_sel.id)
+    htpc = _htpc_clients.pop(cfg.id, None)
+    if htpc:
+        asyncio.create_task(htpc.stop())
+    htpc_remote = _htpc_remotes.pop(cfg.id, None)
+    if htpc_remote:
+        api.available_entities.remove(htpc_remote.id)
+    htpc_sensor = _htpc_sensors.pop(cfg.id, None)
+    if htpc_sensor:
+        api.available_entities.remove(htpc_sensor.id)
     _LOG.info("Device removed: %s", cfg.id)
 
 
@@ -177,6 +216,28 @@ def _make_state_handler(device_id: str):
     return _on_state
 
 
+def _make_power_handler(device_id: str):
+    async def _on_power(power: str) -> None:
+        remote = _htpc_remotes.get(device_id)
+        if remote:
+            api.configured_entities.update_attributes(remote.id, remote.apply_power(power))
+        sensor = _htpc_sensors.get(device_id)
+        if sensor:
+            api.configured_entities.update_attributes(sensor.id, sensor.apply_power(power))
+
+    return _on_power
+
+
+async def _start_and_push_htpc(device_id: str) -> None:
+    """Start polling the HTPC device (if any) and push its current power state."""
+    htpc = _htpc_clients.get(device_id)
+    if not htpc:
+        return
+    htpc.start()
+    power = await htpc.refresh()
+    await _make_power_handler(device_id)(power)
+
+
 # ---------------------------------------------------------------------------
 # ucapi callbacks
 # ---------------------------------------------------------------------------
@@ -194,6 +255,9 @@ async def _on_connect() -> None:
             if current:
                 handler = _make_state_handler(device_id)
                 await handler(current, True)
+
+    for device_id in _htpc_clients:
+        await _start_and_push_htpc(device_id)
 
 
 @api.listens_to(ucapi.Events.DISCONNECT)
@@ -222,6 +286,9 @@ async def _on_exit_standby() -> None:
             # Client was stopped for some other reason — restart it.
             client.start()
         # else: reconnect loop is already running; state_full will arrive on reconnect.
+
+    for device_id in _htpc_clients:
+        await _start_and_push_htpc(device_id)
 
 
 @api.listens_to(ucapi.Events.SUBSCRIBE_ENTITIES)
@@ -262,6 +329,9 @@ async def _on_subscribe(entity_ids: list[str]) -> None:
                 _LOG.info("Subscribe: pushing current state to device %s", device_id)
                 handler = _make_state_handler(device_id)
                 await handler(current, True)
+
+        # Start polling the optional PC power device and push its current state.
+        await _start_and_push_htpc(device_id)
 
 
 @api.listens_to(ucapi.Events.UNSUBSCRIBE_ENTITIES)
