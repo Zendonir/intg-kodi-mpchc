@@ -96,9 +96,14 @@ class HtpcRemote(Remote):
         if cmd_id == Commands.SEND_CMD:
             return await self._run_simple((params or {}).get("command", ""))
         if cmd_id == Commands.SEND_CMD_SEQUENCE:
-            ok: bool | None = True
+            ok = True
             for command in (params or {}).get("sequence", []):
-                ok = bool(await self._run_simple(command)) and ok
+                result = await self._run_simple(command)
+                if result is None:
+                    # Unknown command in the sequence: a config error, not a
+                    # reachability problem — report it as BAD_REQUEST.
+                    return None
+                ok = result and ok
             return ok
         return None
 
