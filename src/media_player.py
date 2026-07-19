@@ -320,8 +320,7 @@ class BridgeMediaPlayer(MediaPlayer):
         ok = await self._dispatch(cmd_id, params)
         if not ok and cmd_id in self._POWER_COMMANDS:
             _LOG.warning(
-                "Power command '%s' failed — bridge not reachable; "
-                "continuing without aborting the activity",
+                "Power command '%s' failed — bridge not reachable; continuing without aborting the activity",
                 cmd_id,
             )
             return StatusCodes.OK
