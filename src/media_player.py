@@ -310,9 +310,20 @@ class BridgeMediaPlayer(MediaPlayer):
     # ------------------------------------------------------------------
     # Commands
     # ------------------------------------------------------------------
+    # Power commands must not abort a running activity sequence on the UC
+    # Remote: when the PC (and thus the bridge) is off/unreachable, they are
+    # answered with OK and only a warning is logged.
+    _POWER_COMMANDS = (Commands.ON, Commands.OFF, Commands.TOGGLE)
+
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
         _LOG.debug("command %s %s", cmd_id, params)
         ok = await self._dispatch(cmd_id, params)
+        if not ok and cmd_id in self._POWER_COMMANDS:
+            _LOG.warning(
+                "Power command '%s' failed — bridge not reachable; continuing without aborting the activity",
+                cmd_id,
+            )
+            return StatusCodes.OK
         return StatusCodes.OK if ok else StatusCodes.SERVER_ERROR
 
     async def _dispatch(self, cmd_id: str, params: dict | None) -> bool:
