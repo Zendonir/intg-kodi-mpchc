@@ -58,6 +58,10 @@ class HtpcClient:
     def power(self) -> str:
         return self._power
 
+    @property
+    def address(self) -> str:
+        return self._base_url
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -101,9 +105,9 @@ class HtpcClient:
 
     async def _command(self, path: str) -> bool:
         ok = await self._get(path) is not None
-        if ok:
-            # Re-read state shortly after so entities update promptly.
-            asyncio.create_task(self._refresh_after_delay())
+        # Re-read state shortly after so entities update promptly — also on
+        # failure, so an unreachable device shows up as "unknown" right away.
+        asyncio.create_task(self._refresh_after_delay())
         return ok
 
     async def _refresh_after_delay(self) -> None:

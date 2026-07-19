@@ -10,6 +10,7 @@ Two entities are created per configured device (only when an HTPC IP is set):
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ucapi import Remote, Sensor, StatusCodes
@@ -21,6 +22,8 @@ from ucapi.ui import Buttons, Size, UiPage, create_btn_mapping, create_ui_text
 
 from config import DeviceConfig
 from htpc_client import HtpcClient
+
+_LOG = logging.getLogger(__name__)
 
 # Freely assignable simple commands exposed to the UC Remote profile editor.
 HTPC_SIMPLE_COMMANDS = ["power_on", "power_off", "force_off", "reset", "toggle"]
@@ -68,9 +71,22 @@ class HtpcRemote(Remote):
 
     async def _handle_command(self, _entity: Remote, cmd_id: str, params: dict | None) -> StatusCodes:
         ok = await self._dispatch(cmd_id, params)
-        return StatusCodes.OK if ok else StatusCodes.SERVER_ERROR
+        if ok is None:
+            return StatusCodes.BAD_REQUEST
+        if not ok:
+            # Report OK anyway: a non-OK status would abort the whole running
+            # activity sequence on the UC Remote. The state poller flips the
+            # entities to "unknown" so the failure is still visible.
+            _LOG.warning(
+                "PC power command '%s' failed — device at %s not reachable; "
+                "continuing without aborting the activity",
+                cmd_id,
+                self._client.address,
+            )
+        return StatusCodes.OK
 
-    async def _dispatch(self, cmd_id: str, params: dict | None) -> bool:
+    async def _dispatch(self, cmd_id: str, params: dict | None) -> bool | None:
+        """Run *cmd_id*. Returns None for an unknown command."""
         if cmd_id == Commands.ON:
             return await self._client.power_on()
         if cmd_id == Commands.OFF:
@@ -80,13 +96,13 @@ class HtpcRemote(Remote):
         if cmd_id == Commands.SEND_CMD:
             return await self._run_simple((params or {}).get("command", ""))
         if cmd_id == Commands.SEND_CMD_SEQUENCE:
-            ok = True
+            ok: bool | None = True
             for command in (params or {}).get("sequence", []):
-                ok = await self._run_simple(command) and ok
+                ok = bool(await self._run_simple(command)) and ok
             return ok
-        return False
+        return None
 
-    async def _run_simple(self, command: str) -> bool:
+    async def _run_simple(self, command: str) -> bool | None:
         actions = {
             "power_on": self._client.power_on,
             "power_off": self._client.power_off,
@@ -96,7 +112,7 @@ class HtpcRemote(Remote):
         }
         action = actions.get(command)
         if not action:
-            return False
+            return None
         return await action()
 
 

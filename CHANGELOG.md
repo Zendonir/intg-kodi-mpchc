@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Fixed
+- Power on/off no longer aborts a running activity sequence when the device is
+  unreachable: failed power commands on the PC remote (Einschaltgerät) and the
+  media player now log a warning and report OK instead of an error, so the
+  rest of the on/off sequence continues. The PC entities still flip to
+  "unknown" right after a failed command so the problem stays visible.
 
 ---
 
