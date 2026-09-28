@@ -26,6 +26,7 @@ The [kodi-mpchc-bridge](https://github.com/Zendonir/kodi-mpchc-bridge) hub runs 
 - D-pad navigation (Kodi UI control)
 - Artwork, title (`S{s}E{e} – Title` for episodes), artist, album metadata
 - Media browser with per-episode thumbnails, ▶ Now Playing indicator and Coverflow support
+- Kodi favourites, Live TV / Radio channels (Now/Next EPG) and video / music add-ons in the media browser
 - Optimistic watched-mark when playlist advances to next episode
 
 ### Select entities

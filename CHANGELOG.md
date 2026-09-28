@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- Media browser: besides the current season's episodes the browser now shows
+  the Kodi folders provided by the bridge — **Favourites**, **Live TV** and
+  **Radio** (channel groups, channels with logo and Now/Next EPG) and installed
+  **video / music add-ons**. Selecting an item starts it in Kodi. Empty or
+  unavailable folders are hidden. Requires kodi-mpchc-bridge with the
+  `/api/browse` endpoints; older bridges simply show the episode list.
+- Remote entity: `send_cmd` honours the `repeat` and `delay` parameters, and
+  command sequences (`send_cmd_sequence`) are supported.
+
+### Changed
+- Faster reconnect after the UC Remote wakes up: `EXIT_STANDBY` no longer
+  blocks; the bridge link is checked in the background and, if it is down or
+  half-open, re-established with retries every ~500 ms instead of waiting for
+  the regular 5 s back-off.
+- ucapi 0.7.
+
+### Fixed
+- The bridge's "no episodes" placeholder (`episodeid == -1`) no longer shows up
+  as an episode in the media browser.
+- Empty-string command parameters sent by the remote (e.g. `seconds: ""`,
+  `hold: ""`) no longer raise errors; titles/subtitles are clipped to the
+  UC Remote's 255-character limit and unknown browse ids return `NOT_FOUND`.
 
 ---
 

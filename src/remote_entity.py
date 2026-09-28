@@ -10,8 +10,11 @@ a ready-made button layout with three pages:
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 from ucapi import Remote, StatusCodes
-from ucapi.remote import Attributes, Features, States, create_send_cmd
+from ucapi.remote import Attributes, Commands, Features, States, create_send_cmd
 from ucapi.ui import (
     Buttons,
     Size,
@@ -23,6 +26,21 @@ from ucapi.ui import (
 
 from bridge_client import BridgeClient
 from config import DeviceConfig
+
+
+def get_int_param(param: str, params: dict[str, Any], default: int) -> int:
+    """Read an integer command parameter.
+
+    The UC Remote sometimes sends numeric parameters as (empty) strings,
+    e.g. ``hold == ""`` — treat those as *default*.
+    """
+    value = params.get(param, default)
+    if value is None or value == "":
+        return default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def _build_button_mapping() -> list:
@@ -149,8 +167,25 @@ class BridgeRemote(Remote):
         cmd_id: str,
         params: dict | None,
     ) -> StatusCodes:
-        bridge_cmd = (params or {}).get("command", "")
-        if not bridge_cmd:
+        params = params or {}
+        if cmd_id == Commands.SEND_CMD_SEQUENCE:
+            commands = [str(c) for c in params.get("sequence") or [] if c]
+        else:
+            commands = [str(params.get("command") or "")] if params.get("command") else []
+        if not commands:
             return StatusCodes.BAD_REQUEST
-        ok = await self._client.send_command(bridge_cmd, None)
+
+        # Optional ucapi send_cmd parameters: repeat the command(s) and wait
+        # *delay* ms between individual commands.
+        repeat = max(1, get_int_param("repeat", params, 1))
+        delay = max(0, get_int_param("delay", params, 0)) / 1000.0
+
+        ok = True
+        first = True
+        for _ in range(repeat):
+            for bridge_cmd in commands:
+                if not first and delay:
+                    await asyncio.sleep(delay)
+                first = False
+                ok = await self._client.send_command(bridge_cmd, None) and ok
         return StatusCodes.OK if ok else StatusCodes.SERVER_ERROR

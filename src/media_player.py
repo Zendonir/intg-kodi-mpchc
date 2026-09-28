@@ -70,6 +70,47 @@ _STATE_MAP = {
     "idle": States.STANDBY,
 }
 
+# UC Remote limit for browse item titles / subtitles
+_MAX_TEXT_LEN = 255
+
+# Browse ids that belong to the current-season episode list; everything else
+# (favourites, pvr/…, addons/…, channel/…, …) is a bridge Kodi browse id.
+_SEASON_ID = "season"
+_ROOT_IDS = (None, "", "root", _SEASON_ID)
+
+# bridge browse item kind → (MediaClass, MediaContentType)
+_BROWSE_KIND_MAP = {
+    "folder": (MediaClass.DIRECTORY, None),
+    "channel": (MediaClass.CHANNEL, MediaContentType.CHANNEL),
+    "addon": (MediaClass.APP, MediaContentType.APP),
+    "favourite": (MediaClass.VIDEO, MediaContentType.VIDEO),
+}
+
+
+def _clip(text: str | None) -> str | None:
+    """Clip *text* to the UC Remote's 255-character label limit."""
+    if not text:
+        return text
+    if len(text) > _MAX_TEXT_LEN:
+        return text[: _MAX_TEXT_LEN - 3].rstrip() + "..."
+    return text
+
+
+def _to_float(value: Any, default: float) -> float:
+    """Parse a numeric command parameter; the remote sometimes sends ``""``."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _real_episodes(episodes: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Drop the bridge's ``episodeid == -1`` "no episodes" sentinel entry."""
+    return [ep for ep in episodes or [] if ep.get("episodeid", 0) != -1]
+
+
 # bridge media_type → ucapi MediaContentType
 _MEDIA_TYPE_MAP = {
     "movie": MediaContentType.MOVIE,
@@ -141,7 +182,7 @@ class BridgeMediaPlayer(MediaPlayer):
         """Optimistically set playcount=1 for the episode that just finished."""
         if new_idx <= old_idx or old_idx < 0:
             return
-        episodes: list[dict[str, Any]] = self._state.get("season_episodes", [])
+        episodes: list[dict[str, Any]] = _real_episodes(self._state.get("season_episodes"))
         if 0 <= old_idx < len(episodes):
             ep = episodes[old_idx]
             ep["playcount"] = max(ep.get("playcount", 0), 1)
@@ -154,7 +195,7 @@ class BridgeMediaPlayer(MediaPlayer):
         Defaults: +30 s forward, +10 s backward.
         """
         default = 30 if cmd_id == Commands.CHANNEL_UP else 10
-        delta = abs(float(params.get("seconds", params.get("value", default))))
+        delta = abs(_to_float(params.get("seconds", params.get("value")), default))
         direction = 1 if cmd_id == Commands.CHANNEL_UP else -1
         new_pos = max(0.0, float(self._state.get("position", 0)) + direction * delta)
         return await client.send_command("seek", new_pos)
@@ -255,16 +296,59 @@ class BridgeMediaPlayer(MediaPlayer):
     # Media browser
     # ------------------------------------------------------------------
     async def browse(self, options: BrowseOptions) -> BrowseResults | StatusCodes:
-        """Return the current season's episode list for the media browser widget."""
-        episodes: list[dict[str, Any]] = self._state.get("season_episodes", [])
+        """Media browser.
+
+        The root shows the current season's episode list (current episode
+        first) followed by the Kodi folders provided by the bridge
+        (favourites, Live TV, Radio, add-ons). Without an episode list the
+        root only contains the Kodi folders.
+        """
+        if options.media_id in _ROOT_IDS:
+            container = await self._browse_root(options.media_id == _SEASON_ID)
+        else:
+            container = await self._browse_kodi(options.media_id)
+        if container is None:
+            return StatusCodes.NOT_FOUND
+        count = len(container.items or [])
+        return BrowseResults(media=container, pagination=Pagination(page=1, limit=count, count=count))
+
+    async def _browse_root(self, season_only: bool) -> BrowseMediaItem:
+        episodes = _real_episodes(self._state.get("season_episodes"))
+        current_artwork = self._state.get("artwork_url", "") or None
+
+        kodi_items: list[BrowseMediaItem] = []
+        if not season_only and self._client.connected:
+            root = await self._client.browse("root")
+            if root:
+                kodi_items = self._kodi_items(root)
+
         if not episodes:
-            return BrowseResults(media=None, pagination=Pagination(page=1, limit=0, count=0))
+            return BrowseMediaItem(
+                media_id="root",
+                title="Kodi",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                can_play=False,
+                items=kodi_items,
+            )
 
         tv_show = self._state.get("tv_show", "")
         season = self._state.get("season", 0)
+        season_label = f"S{season:02d} \u2013 {tv_show}" if tv_show else f"Season {season}"
+        return BrowseMediaItem(
+            media_id=_SEASON_ID,
+            title=_clip(season_label),
+            media_class=MediaClass.SEASON,
+            media_type=MediaContentType.TV_SHOW,
+            can_browse=True,
+            can_play=False,
+            thumbnail=current_artwork,
+            items=self._episode_items(episodes, current_artwork) + kodi_items,
+        )
+
+    def _episode_items(self, episodes: list[dict[str, Any]], current_artwork: str | None) -> list[BrowseMediaItem]:
+        season = self._state.get("season", 0)
         playlist_index = self._state.get("playlist_index", -1)
-        # Use current artwork as fallback thumbnail for every episode without its own image.
-        current_artwork = self._state.get("artwork_url", "") or None
 
         ep_items: list[BrowseMediaItem] = []
         for i, ep in enumerate(episodes):
@@ -274,7 +358,7 @@ class BridgeMediaPlayer(MediaPlayer):
             ep_items.append(
                 BrowseMediaItem(
                     media_id=str(ep.get("episodeid", i)),
-                    title=self._ep_display_title(ep, season, i),
+                    title=_clip(self._ep_display_title(ep, season, i)),
                     subtitle=self._ep_subtitle(ep, is_current),
                     media_class=MediaClass.EPISODE,
                     media_type=MediaContentType.TV_SHOW,
@@ -290,22 +374,45 @@ class BridgeMediaPlayer(MediaPlayer):
         # ensures the highlight lands on the active episode automatically.
         if 0 <= playlist_index < len(ep_items):
             ep_items = ep_items[playlist_index:] + ep_items[:playlist_index]
+        return ep_items
 
-        season_label = f"S{season:02d} \u2013 {tv_show}" if tv_show else f"Season {season}"
-        container = BrowseMediaItem(
-            media_id="season",
-            title=season_label,
-            media_class=MediaClass.SEASON,
-            media_type=MediaContentType.TV_SHOW,
+    async def _browse_kodi(self, media_id: str) -> BrowseMediaItem | None:
+        folder = await self._client.browse(media_id)
+        if folder is None:
+            return None
+        return BrowseMediaItem(
+            media_id=media_id,
+            title=_clip(folder.get("title") or media_id),
+            media_class=MediaClass.DIRECTORY,
             can_browse=True,
             can_play=False,
-            thumbnail=current_artwork,
-            items=ep_items,
+            items=self._kodi_items(folder),
         )
-        return BrowseResults(
-            media=container,
-            pagination=Pagination(page=1, limit=len(ep_items), count=len(ep_items)),
-        )
+
+    def _kodi_items(self, folder: dict[str, Any]) -> list[BrowseMediaItem]:
+        """Convert a bridge browse listing into BrowseMediaItems."""
+        items: list[BrowseMediaItem] = []
+        for entry in folder.get("items") or []:
+            item_id = str(entry.get("id") or "")
+            if not item_id or len(item_id) > _MAX_TEXT_LEN:
+                continue
+            media_class, media_type = _BROWSE_KIND_MAP.get(entry.get("kind", ""), (MediaClass.DIRECTORY, None))
+            thumbnail = entry.get("thumbnail") or None
+            if thumbnail and thumbnail.startswith("/"):
+                thumbnail = f"{self._client.base_url}{thumbnail}"
+            items.append(
+                BrowseMediaItem(
+                    media_id=item_id,
+                    title=_clip(entry.get("title") or item_id),
+                    subtitle=_clip(entry.get("subtitle")),
+                    media_class=media_class,
+                    media_type=media_type,
+                    can_browse=bool(entry.get("can_browse")),
+                    can_play=bool(entry.get("can_play")),
+                    thumbnail=thumbnail,
+                )
+            )
+        return items
 
     # ------------------------------------------------------------------
     # Commands
@@ -365,11 +472,11 @@ class BridgeMediaPlayer(MediaPlayer):
             return await c.send_command(bridge_cmd, val)
 
         if cmd_id == Commands.SEEK:
-            pos = p.get("media_position", 0)
+            pos = _to_float(p.get("media_position"), 0.0)
             return await c.send_command("seek", pos)
 
         if cmd_id == Commands.VOLUME:
-            vol = p.get("volume", 0)
+            vol = int(_to_float(p.get("volume"), 0.0))
             return await c.send_command("set_volume", vol)
 
         if cmd_id == Commands.REPEAT:
@@ -381,11 +488,14 @@ class BridgeMediaPlayer(MediaPlayer):
 
         if cmd_id == Commands.PLAY_MEDIA:
             media_id = str(p.get("media_id", ""))
-            for ep in self._state.get("season_episodes", []):
+            for ep in _real_episodes(self._state.get("season_episodes")):
                 if str(ep.get("episodeid")) == media_id:
                     filepath = ep.get("file", "")
                     if filepath:
                         return await c.play_episode(filepath)
+            if media_id and not media_id.lstrip("-").isdigit():
+                # Kodi browse item (channel/…, addon/…, file/…, window/…)
+                return await c.browse_play(media_id)
             _LOG.warning("PLAY_MEDIA: episode not found: %s", media_id)
             return False
 
