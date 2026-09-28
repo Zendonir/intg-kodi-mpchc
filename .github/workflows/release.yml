@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to release (e.g. v0.8.0), created from the selected branch. Leave empty for a dev pre-release."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -20,7 +25,9 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
@@ -51,7 +58,7 @@ jobs:
             - [kodi-mpchc-bridge](https://github.com/Zendonir/kodi-mpchc-bridge/releases) läuft auf dem Windows-PC
             - Bridge-Port 13590 ist in der Firewall freigegeben
           draft: false
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.tag == '' }}
           files: ${{ env.ZIP }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
