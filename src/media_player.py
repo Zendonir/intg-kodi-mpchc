@@ -276,11 +276,14 @@ class BridgeMediaPlayer(MediaPlayer):
         return await self._client.send_command(cmd)
 
     def _album_text(self) -> str:
-        """Album line: the real album for music, else the current chapter."""
+        """Album line: the real album for music, else the current chapter.
+
+        Non-music media fall back to the album only when there are no chapters.
+        """
         album = self._state.get("album", "") or ""
-        if album or self._state.get("media_type") == "music":
+        if self._state.get("media_type") == "music":
             return album
-        return chap.now_playing_text(self._state)
+        return chap.now_playing_text(self._state) or album
 
     def _playlist_text(self) -> str:
         """``S01 – Show`` while an episode is playing."""
