@@ -287,20 +287,14 @@ async def _on_standby() -> None:
 
 @api.listens_to(ucapi.Events.EXIT_STANDBY)
 async def _on_exit_standby() -> None:
-    for device_id, client in _clients.items():
-        if client.connected:
-            # Already connected: push fresh state so entities are up to date.
-            current = await client.fetch_state()
-            if current:
-                handler = _make_state_handler(device_id)
-                await handler(current, True)
-        elif not client.running:
-            # Client was stopped for some other reason — restart it.
-            client.start()
-        # else: reconnect loop is already running; state_full will arrive on reconnect.
+    # Do not block the EXIT_STANDBY handler while the remote's network stack is
+    # still recovering: run the reconnect / state refresh in the background so
+    # button presses are processed immediately.
+    for client in _clients.values():
+        _LOOP.create_task(client.wake())
 
     for device_id in _htpc_clients:
-        await _start_and_push_htpc(device_id)
+        _LOOP.create_task(_start_and_push_htpc(device_id))
 
 
 @api.listens_to(ucapi.Events.SUBSCRIBE_ENTITIES)

@@ -21,7 +21,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.9.0",
-    # ucapi is installed from the bundled wheel in src/ via requirements.txt
+    # ucapi is installed from PyPI via requirements.txt
 ]
 
 [project.readme]

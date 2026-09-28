@@ -18,6 +18,12 @@ _LOG = logging.getLogger(__name__)
 
 RECONNECT_DELAY = 5.0
 
+# On EXIT_STANDBY the UC Remote may deliver the event before its Wi-Fi route
+# is usable again. Retry quickly for a short window instead of waiting for the
+# regular RECONNECT_DELAY (pattern from albaintor/integration-kodi v1.21.2).
+WAKE_RECONNECT_RETRIES = 10
+WAKE_RECONNECT_INTERVAL = 0.5
+
 StateCallback = Callable[[dict[str, Any], bool], Awaitable[None]]
 """Signature: async def cb(state: dict, is_full: bool) -> None"""
 
@@ -38,15 +44,26 @@ class BridgeClient:
         self._cmd_url = f"{_base}/api/command"
         self._state_url = f"{_base}/api/state"
         self._external_play_url = f"{_base}/api/external_play"
+        self._browse_url = f"{_base}/api/browse"
+        self._browse_play_url = f"{_base}/api/browse/play"
         self._on_state = on_state
         self._session: aiohttp.ClientSession | None = None
         self._running = False
         self._task: asyncio.Task | None = None
         self._connected = False
+        self._ws: aiohttp.ClientWebSocketResponse | None = None
+        # Set to cut the reconnect back-off short (see wake()).
+        self._wake_event = asyncio.Event()
+        # Remaining reconnect attempts that use the short wake interval.
+        self._fast_retries = 0
 
     @property
     def connected(self) -> bool:
         return self._connected
+
+    @property
+    def base_url(self) -> str:
+        return self._base_url
 
     @property
     def running(self) -> bool:
@@ -73,6 +90,29 @@ class BridgeClient:
             await self._session.close()
             self._session = None
         self._connected = False
+
+    async def wake(self) -> None:
+        """Re-establish the bridge link quickly after the UC Remote woke up.
+
+        * Not connected: interrupt the reconnect back-off and retry every
+          ~500 ms for a few attempts while the remote's network comes back.
+        * Connected: verify the link with a state fetch. If the bridge does not
+          answer, the socket is most likely half-open after the remote slept —
+          drop it so the reconnect loop takes over with fast retries.
+          Otherwise the fresh state is pushed to the entities.
+        """
+        if not self._running:
+            self.start()
+        if self._connected:
+            current = await self.fetch_state()
+            if current is not None:
+                await self._on_state(current, True)
+                return
+            _LOG.info("Bridge did not answer after wake — forcing reconnect")
+            if self._ws is not None and not self._ws.closed:
+                await self._ws.close()
+        self._fast_retries = WAKE_RECONNECT_RETRIES
+        self._wake_event.set()
 
     # ------------------------------------------------------------------
     # Commands
@@ -145,6 +185,40 @@ class BridgeClient:
             _LOG.debug("play_episode failed: %s", exc)
             return False
 
+    async def browse(self, item_id: str) -> dict[str, Any] | None:
+        """GET /api/browse — Kodi favourites / PVR / add-ons listing.
+
+        Returns ``None`` when the folder is unknown, the bridge is unreachable
+        or the bridge is too old to provide the browse API.
+        """
+        try:
+            session = await self._get_session()
+            async with session.get(
+                self._browse_url,
+                params={"id": item_id},
+                timeout=aiohttp.ClientTimeout(total=8.0),
+            ) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                _LOG.debug("browse %s → HTTP %s", item_id, resp.status)
+        except Exception as exc:
+            _LOG.debug("browse %s failed: %s", item_id, exc)
+        return None
+
+    async def browse_play(self, item_id: str) -> bool:
+        """POST /api/browse/play — start a browse item (channel, add-on, favourite)."""
+        try:
+            session = await self._get_session()
+            async with session.post(
+                self._browse_play_url,
+                json={"id": item_id},
+                timeout=aiohttp.ClientTimeout(total=5.0),
+            ) as resp:
+                return resp.status == 200
+        except Exception as exc:
+            _LOG.debug("browse_play %s failed: %s", item_id, exc)
+            return False
+
     async def fetch_state(self) -> dict[str, Any] | None:
         """GET the current full state from the bridge."""
         try:
@@ -187,12 +261,26 @@ class BridgeClient:
                     _LOG.debug("Bridge WS error (attempt %d): %s", attempt, exc)
 
             self._connected = False
+            self._ws = None
 
             if not self._running:
                 return
 
-            _LOG.info("Bridge disconnected, retry #%d in %ss…", attempt, RECONNECT_DELAY)
-            await asyncio.sleep(RECONNECT_DELAY)
+            if self._fast_retries > 0:
+                self._fast_retries -= 1
+                delay = WAKE_RECONNECT_INTERVAL
+            else:
+                delay = RECONNECT_DELAY
+            _LOG.info("Bridge disconnected, retry #%d in %ss…", attempt, delay)
+            await self._backoff(delay)
+
+    async def _backoff(self, delay: float) -> None:
+        """Sleep *delay* seconds, or less if wake() asks for an immediate retry."""
+        try:
+            await asyncio.wait_for(self._wake_event.wait(), timeout=delay)
+        except asyncio.TimeoutError:
+            pass
+        self._wake_event.clear()
 
     async def _connect(self) -> None:
         session = await self._get_session()
@@ -203,7 +291,10 @@ class BridgeClient:
             heartbeat=30,
             timeout=aiohttp.ClientTimeout(total=10),
         ) as ws:
+            self._ws = ws
             self._connected = True
+            self._fast_retries = 0
+            self._wake_event.clear()
             _LOG.info("Bridge WebSocket connected")
 
             async for msg in ws:
