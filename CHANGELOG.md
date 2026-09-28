@@ -15,17 +15,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/api/browse` endpoints; older bridges simply show the episode list.
 - Remote entity: `send_cmd` honours the `repeat` and `delay` parameters, and
   command sequences (`send_cmd_sequence`) are supported.
+- Chapters on the remote (the UC API has no chapter markers for the progress
+  bar, so they are shown in the places it does support):
+  - the album line shows `Kapitel 3/12 · Name` while a film/episode plays
+    (music keeps its album),
+  - a **Kapitel** folder in the media browser lists all chapters with start
+    time and the current one marked; selecting one jumps there,
+  - chapters are the media player's **source list** (`select_source`), audio
+    tracks its **sound mode list** (`select_sound_mode`) — both selectable in
+    the media widget.
+- `audio_track` / `subtitle` commands: cycle to the next audio track, and
+  subtitles off → track 1 → … → off.
+- `media_playlist` shows `S01 – Show` while an episode plays.
+- `media_position_updated_at` is sent with every position update so the remote
+  can interpolate the progress bar.
 
 ### Changed
 - Faster reconnect after the UC Remote wakes up: `EXIT_STANDBY` no longer
   blocks; the bridge link is checked in the background and, if it is down or
   half-open, re-established with retries every ~500 ms instead of waiting for
   the regular 5 s back-off.
-- ucapi 0.7.
+- ucapi 0.7; the stale bundled ucapi 0.5.3 wheel was removed from `src/`.
 
 ### Fixed
-- The bridge's "no episodes" placeholder (`episodeid == -1`) no longer shows up
-  as an episode in the media browser.
+- The bridge's "no episodes"/"no tracks" placeholders (`episodeid`/`pos == -1`)
+  no longer show up as an episode in the media browser or as an option in the
+  audio / subtitle / chapter / episode selects — those turn UNAVAILABLE.
+- Jumping to a chapter works for chapters reported by Kodi without start times
+  (all `time_ms == 0`): it now steps chapter by chapter instead of seeking to 0.
+- `SOURCE_LIST` was filled with audio tracks although source selection was
+  not enabled.
 - Empty-string command parameters sent by the remote (e.g. `seconds: ""`,
   `hold: ""`) no longer raise errors; titles/subtitles are clipped to the
   UC Remote's 255-character limit and unknown browse ids return `NOT_FOUND`.

@@ -27,6 +27,8 @@ The [kodi-mpchc-bridge](https://github.com/Zendonir/kodi-mpchc-bridge) hub runs 
 - Artwork, title (`S{s}E{e} – Title` for episodes), artist, album metadata
 - Media browser with per-episode thumbnails, ▶ Now Playing indicator and Coverflow support
 - Kodi favourites, Live TV / Radio channels (Now/Next EPG) and video / music add-ons in the media browser
+- Chapters: current chapter (`Kapitel 3/12 · Name`) under the title, chapter list in the media browser, chapters / audio tracks selectable as source / sound mode in the media widget
+- Audio-track and subtitle buttons cycle through the available tracks
 - Optimistic watched-mark when playlist advances to next episode
 
 ### Select entities

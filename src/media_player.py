@@ -5,6 +5,7 @@ UC Remote media player entity backed by the bridge hub.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from ucapi import MediaPlayer, StatusCodes
@@ -23,6 +24,7 @@ from ucapi.media_player import (
     States,
 )
 
+import chapters as chap
 from bridge_client import BridgeClient
 from config import DeviceConfig
 
@@ -60,6 +62,12 @@ _FEATURES = [
     # Media browser (UC Remote >= 2.9.1)
     Features.BROWSE_MEDIA,
     Features.PLAY_MEDIA,
+    # Chapters as "source", audio tracks as "sound mode" — selectable in the widget
+    Features.SELECT_SOURCE,
+    Features.SELECT_SOUND_MODE,
+    # Dedicated audio-track / subtitle commands (cycle to the next track)
+    Features.AUDIO_TRACK,
+    Features.SUBTITLE,
 ]
 
 # bridge unified state → ucapi state
@@ -77,6 +85,9 @@ _MAX_TEXT_LEN = 255
 # (favourites, pvr/…, addons/…, channel/…, …) is a bridge Kodi browse id.
 _SEASON_ID = "season"
 _ROOT_IDS = (None, "", "root", _SEASON_ID)
+# Chapter list folder and item prefix ("chapter/<index>")
+_CHAPTERS_ID = "chapters"
+_CHAPTER_PREFIX = "chapter/"
 
 # bridge browse item kind → (MediaClass, MediaContentType)
 _BROWSE_KIND_MAP = {
@@ -221,24 +232,63 @@ class BridgeMediaPlayer(MediaPlayer):
         return "✓ Watched" if watched else None
 
     async def _step_track(self, tracks_key: str, cur_key: str, bridge_cmd: str, direction: int) -> bool:
-        tracks = self._state.get(tracks_key, [])
+        tracks = chap.real_items(self._state.get(tracks_key))
         if not tracks:
             return False
         cur = self._state.get(cur_key, 0)
         nxt = (max(cur, 0) + direction) % len(tracks)
         return await self._client.send_command(bridge_cmd, tracks[nxt].get("pos", nxt))
 
+    async def _cycle_subtitle(self) -> bool:
+        """Subtitle button: off → track 1 → track 2 → … → off."""
+        tracks = chap.real_items(self._state.get("subtitle_tracks"))
+        if not tracks:
+            return False
+        cur = self._state.get("current_subtitle", -1)
+        if cur < 0:
+            return await self._client.send_command("subtitle_track", tracks[0].get("pos", 0))
+        if cur + 1 >= len(tracks):
+            return await self._client.send_command("subtitle_track", -1)
+        return await self._client.send_command("subtitle_track", tracks[cur + 1].get("pos", cur + 1))
+
     async def _step_chapter(self, direction: int) -> bool:
-        chapters = self._state.get("chapters", [])
+        chapters = chap.chapters_of(self._state)
         if not chapters:
             return False
         cur = self._state.get("current_chapter", 0)
         nxt = max(0, min(len(chapters) - 1, cur + direction))
-        return await self._client.send_command("seek", chapters[nxt].get("time_ms", 0) / 1000.0)
+        return await chap.goto_chapter(self._client, self._state, nxt)
+
+    async def _select_audio_by_label(self, label: str) -> bool:
+        for i, track in enumerate(chap.real_items(self._state.get("audio_tracks"))):
+            if track.get("label", f"Track {i}") == label:
+                return await self._client.send_command("audio_track", track.get("pos", i))
+        return False
+
+    async def _select_chapter_by_label(self, label: str) -> bool:
+        for i, chapter in enumerate(chap.chapters_of(self._state)):
+            if chap.chapter_label(chapter, i) == label:
+                return await chap.goto_chapter(self._client, self._state, i)
+        return False
 
     async def _step_episode(self, direction: int) -> bool:
         cmd = "next_episode" if direction > 0 else "prev_episode"
         return await self._client.send_command(cmd)
+
+    def _album_text(self) -> str:
+        """Album line: the real album for music, else the current chapter."""
+        album = self._state.get("album", "") or ""
+        if album or self._state.get("media_type") == "music":
+            return album
+        return chap.now_playing_text(self._state)
+
+    def _playlist_text(self) -> str:
+        """``S01 – Show`` while an episode is playing."""
+        tv_show = self._state.get("tv_show", "")
+        season = self._state.get("season", 0)
+        if self._state.get("media_type") != "episode" or not tv_show:
+            return ""
+        return f"S{season:02d} \u2013 {tv_show}" if season > 0 else tv_show
 
     # ------------------------------------------------------------------
     # State updates from bridge
@@ -263,10 +313,15 @@ class BridgeMediaPlayer(MediaPlayer):
             attrs[Attributes.MEDIA_DURATION] = int(patch["duration"])
         if "title" in patch or "season" in patch or "episode" in patch or "media_type" in patch:
             attrs[Attributes.MEDIA_TITLE] = self._format_media_title()
+        if "position" in patch:
+            # Lets the remote interpolate the progress bar between pushes.
+            attrs[Attributes.MEDIA_POSITION_UPDATED_AT] = datetime.now(timezone.utc).isoformat()
         if "artist" in patch:
             attrs[Attributes.MEDIA_ARTIST] = patch["artist"]
-        if "album" in patch:
-            attrs[Attributes.MEDIA_ALBUM] = patch["album"]
+        if any(k in patch for k in ("album", "chapters", "current_chapter", "media_type")):
+            attrs[Attributes.MEDIA_ALBUM] = self._album_text()
+        if any(k in patch for k in ("tv_show", "season", "media_type")):
+            attrs[Attributes.MEDIA_PLAYLIST] = self._playlist_text()
         if "artwork_url" in patch:
             attrs[Attributes.MEDIA_IMAGE_URL] = patch["artwork_url"]
         if "media_type" in patch:
@@ -281,11 +336,17 @@ class BridgeMediaPlayer(MediaPlayer):
             attrs[Attributes.REPEAT] = patch["repeat"]
 
         if "audio_tracks" in patch or "current_audio" in patch:
-            tracks = self._state.get("audio_tracks", [])
+            tracks = chap.real_items(self._state.get("audio_tracks"))
             cur_idx = self._state.get("current_audio", 0)
-            attrs[Attributes.SOURCE_LIST] = [t.get("label", f"Track {i}") for i, t in enumerate(tracks)]
-            if 0 <= cur_idx < len(tracks):
-                attrs[Attributes.SOURCE] = tracks[cur_idx].get("label", "")
+            attrs[Attributes.SOUND_MODE_LIST] = [t.get("label", f"Track {i}") for i, t in enumerate(tracks)]
+            attrs[Attributes.SOUND_MODE] = tracks[cur_idx].get("label", "") if 0 <= cur_idx < len(tracks) else ""
+
+        if "chapters" in patch or "current_chapter" in patch:
+            chapters = chap.chapters_of(self._state)
+            cur_idx = self._state.get("current_chapter", 0)
+            labels = [chap.chapter_label(ch, i) for i, ch in enumerate(chapters)]
+            attrs[Attributes.SOURCE_LIST] = labels
+            attrs[Attributes.SOURCE] = labels[cur_idx] if 0 <= cur_idx < len(labels) else ""
 
         if "playlist_index" in patch:
             self._mark_watched_if_advanced(old_idx, patch["playlist_index"])
@@ -305,6 +366,8 @@ class BridgeMediaPlayer(MediaPlayer):
         """
         if options.media_id in _ROOT_IDS:
             container = await self._browse_root(options.media_id == _SEASON_ID)
+        elif options.media_id == _CHAPTERS_ID:
+            container = self._browse_chapters()
         else:
             container = await self._browse_kodi(options.media_id)
         if container is None:
@@ -317,10 +380,14 @@ class BridgeMediaPlayer(MediaPlayer):
         current_artwork = self._state.get("artwork_url", "") or None
 
         kodi_items: list[BrowseMediaItem] = []
-        if not season_only and self._client.connected:
-            root = await self._client.browse("root")
-            if root:
-                kodi_items = self._kodi_items(root)
+        if not season_only:
+            chapters_folder = self._chapters_folder_item()
+            if chapters_folder:
+                kodi_items.append(chapters_folder)
+            if self._client.connected:
+                root = await self._client.browse("root")
+                if root:
+                    kodi_items += self._kodi_items(root)
 
         if not episodes:
             return BrowseMediaItem(
@@ -375,6 +442,54 @@ class BridgeMediaPlayer(MediaPlayer):
         if 0 <= playlist_index < len(ep_items):
             ep_items = ep_items[playlist_index:] + ep_items[:playlist_index]
         return ep_items
+
+    def _chapters_folder_item(self) -> BrowseMediaItem | None:
+        chapters = chap.chapters_of(self._state)
+        if len(chapters) < 2:
+            return None
+        return BrowseMediaItem(
+            media_id=_CHAPTERS_ID,
+            title="Kapitel",
+            subtitle=chap.now_playing_text(self._state) or None,
+            media_class=MediaClass.DIRECTORY,
+            can_browse=True,
+            can_play=False,
+            thumbnail=self._state.get("artwork_url", "") or None,
+        )
+
+    def _browse_chapters(self) -> BrowseMediaItem | None:
+        chapters = chap.chapters_of(self._state)
+        if not chapters:
+            return None
+        current = self._state.get("current_chapter", 0)
+        with_times = chap.has_timestamps(chapters)
+        items: list[BrowseMediaItem] = []
+        for i, chapter in enumerate(chapters):
+            details = []
+            if i == current:
+                details.append("\u25b6 Aktuell")
+            if with_times:
+                details.append(chap.format_time(chapter.get("time_ms", 0)))
+            items.append(
+                BrowseMediaItem(
+                    media_id=f"{_CHAPTER_PREFIX}{i}",
+                    title=_clip(chap.chapter_label(chapter, i)),
+                    subtitle=" \u00b7 ".join(details) or None,
+                    media_class=MediaClass.VIDEO,
+                    media_type=MediaContentType.VIDEO,
+                    can_browse=False,
+                    can_play=True,
+                )
+            )
+        return BrowseMediaItem(
+            media_id=_CHAPTERS_ID,
+            title=_clip(self._format_media_title() or "Kapitel"),
+            media_class=MediaClass.DIRECTORY,
+            can_browse=True,
+            can_play=False,
+            thumbnail=self._state.get("artwork_url", "") or None,
+            items=items,
+        )
 
     async def _browse_kodi(self, media_id: str) -> BrowseMediaItem | None:
         folder = await self._client.browse(media_id)
@@ -486,8 +601,23 @@ class BridgeMediaPlayer(MediaPlayer):
         if cmd_id in (Commands.CHANNEL_UP, Commands.CHANNEL_DOWN):
             return await self._seek_relative(c, cmd_id, p)
 
+        if cmd_id == Commands.SELECT_SOURCE:
+            return await self._select_chapter_by_label(str(p.get("source", "")))
+        if cmd_id == Commands.SELECT_SOUND_MODE:
+            return await self._select_audio_by_label(str(p.get("mode", "")))
+        if cmd_id == Commands.AUDIO_TRACK:
+            return await self._step_track("audio_tracks", "current_audio", "audio_track", +1)
+        if cmd_id == Commands.SUBTITLE:
+            return await self._cycle_subtitle()
+
         if cmd_id == Commands.PLAY_MEDIA:
             media_id = str(p.get("media_id", ""))
+            if media_id.startswith(_CHAPTER_PREFIX):
+                try:
+                    target = int(media_id.removeprefix(_CHAPTER_PREFIX))
+                except ValueError:
+                    return False
+                return await chap.goto_chapter(self._client, self._state, target)
             for ep in _real_episodes(self._state.get("season_episodes")):
                 if str(ep.get("episodeid")) == media_id:
                     filepath = ep.get("file", "")

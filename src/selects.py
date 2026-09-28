@@ -6,7 +6,11 @@ bridge state pushes and dispatches SELECT_OPTION commands back as bridge
 control commands.
 
 Chapter note: the bridge exposes no direct "jump to chapter N" command.
-Selecting a chapter is implemented by seeking to its timestamp (time_ms).
+Selecting a chapter seeks to its timestamp (time_ms), or steps chapter by
+chapter when the start times are unknown (see chapters.goto_chapter).
+
+The bridge sends a placeholder entry (pos / episodeid == -1) when a list is
+empty; it is filtered out so the entity turns UNAVAILABLE instead.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from typing import Any
 from ucapi import Select, StatusCodes
 from ucapi.select import Attributes, Commands, States
 
+import chapters as chap
 from bridge_client import BridgeClient
 
 # Mapping: select_type → (bridge tracks key, bridge command name, bridge current-index key)
@@ -142,7 +147,7 @@ class BridgeEpisodeSelect(Select):
         if "season" in patch:
             self._season = patch["season"] or 0
         if "season_episodes" in patch:
-            self._episodes = patch["season_episodes"] or []
+            self._episodes = [ep for ep in patch["season_episodes"] or [] if ep.get("episodeid", 0) != -1]
         if "playlist_index" in patch:
             self._playlist_index = patch["playlist_index"]
 
@@ -227,19 +232,22 @@ class BridgeSelect(Select):
             return await self._client.send_command(bridge_cmd, -1)
 
         for i, track in enumerate(self._tracks):
-            if _track_label(track, i) == option:
+            if self._label(track, i) == option:
                 if self._select_type == "chapter":
-                    # The bridge has no direct "jump to chapter N" command.
-                    # Seek to the chapter's start timestamp instead.
-                    time_s = track.get("time_ms", 0) / 1000.0
-                    return await self._client.send_command("seek", time_s)
+                    state = {"chapters": self._tracks, "current_chapter": self._current_idx}
+                    return await chap.goto_chapter(self._client, state, i)
                 return await self._client.send_command(bridge_cmd, track.get("pos", i))
         return False
+
+    def _label(self, track: dict[str, Any], idx: int) -> str:
+        if self._select_type == "chapter":
+            return chap.chapter_label(track, idx)
+        return _track_label(track, idx)
 
     def _label_at(self, idx: int) -> str:
         """Return the display label for track at *idx*."""
         if 0 <= idx < len(self._tracks):
-            return _track_label(self._tracks[idx], idx)
+            return self._label(self._tracks[idx], idx)
         return ""
 
     async def _step(self, direction: int) -> bool:
@@ -265,12 +273,12 @@ class BridgeSelect(Select):
             return {}
 
         if tracks_key in patch:
-            self._tracks = patch[tracks_key] or []
+            self._tracks = chap.real_items(patch[tracks_key])
 
         if current_key in patch:
             self._current_idx = patch[current_key]
 
-        labels = [_track_label(t, i) for i, t in enumerate(self._tracks)]
+        labels = [self._label(t, i) for i, t in enumerate(self._tracks)]
         if self._select_type == "subtitle":
             options = [_SUBTITLE_OFF] + labels
         else:
